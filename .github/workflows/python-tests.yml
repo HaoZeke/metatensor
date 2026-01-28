@@ -17,10 +17,13 @@ jobs:
     strategy:
       matrix:
         include:
+          # XXX: numpy<2.0 can't load files written out from mts.io.save_buffer()
+          # https://github.com/metatensor/metatensor/pull/1025#issuecomment-3808179614
+          # This means a pin to Torch >= 2.3.0
+          # https://github.com/pytorch/pytorch/issues/107302
           - os: ubuntu-24.04
             python-version: "3.10"
-            torch-version: "2.1"
-            numpy-version-pin: "<2.0"
+            torch-version: "2.3"
           - os: ubuntu-24.04
             python-version: "3.10"
             torch-version: "2.9"
@@ -79,4 +82,3 @@ jobs:
         env:
           PIP_EXTRA_INDEX_URL: https://download.pytorch.org/whl/cpu
           METATENSOR_TESTS_TORCH_VERSION: ${{ matrix.torch-version }}
-          METATENSOR_TESTS_NUMPY_VERSION_PIN:  ${{ matrix.numpy-version-pin }}
