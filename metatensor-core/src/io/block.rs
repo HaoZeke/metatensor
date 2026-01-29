@@ -2,10 +2,10 @@ use std::io::BufReader;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use byteorder::{LittleEndian, ReadBytesExt, BigEndian, WriteBytesExt};
+use byteorder::{LittleEndian, BigEndian, NativeEndian, WriteBytesExt, ReadBytesExt};
 use zip::{ZipArchive, ZipWriter};
-use dlpk::sys::{DLDataTypeCode, DLDevice, DLDeviceType, DLPackVersion, DLPACK_MAJOR_VERSION, DLPACK_MINOR_VERSION};
-use dlpk::sys::DLPACK_FLAG_BITMASK_READ_ONLY;
+use dlpk::sys::{DLDataTypeCode, DLDevice, DLTensor, DLPackVersion};
+use dlpk::{DLPackPointerCast, DLPackTensorRefMut};
 use ndarray::ArrayViewD;
 use std::convert::TryInto;
 
@@ -132,6 +132,40 @@ pub(super) fn read_single_block<R, F>(
     return Ok(block);
 }
 
+fn npy_descr_to_dtype(descr: &str) -> Result<(DLDataTypeCode, u8, bool), Error> {
+    if descr.len() < 3 {
+        return Err(Error::Serialization(format!("invalid type descriptor: {}", descr)));
+    }
+
+    let is_little_endian = match &descr[0..1] {
+        "<" | "|" => true,
+        ">" => false,
+        _ => return Err(Error::Serialization(format!("unknown endianness in type descriptor: {}", descr))),
+    };
+
+    let type_char = &descr[1..2];
+    let size_str = &descr[2..];
+    let size: u8 = size_str.parse().map_err(|_| {
+        Error::Serialization(format!("invalid size in type descriptor: {}", descr))
+    })?;
+
+    let (code, bits) = match (type_char, size) {
+        ("f", 4) => (DLDataTypeCode::kDLFloat, 32),
+        ("f", 8) => (DLDataTypeCode::kDLFloat, 64),
+        ("i", 1) => (DLDataTypeCode::kDLInt, 8),
+        ("i", 2) => (DLDataTypeCode::kDLInt, 16),
+        ("i", 4) => (DLDataTypeCode::kDLInt, 32),
+        ("i", 8) => (DLDataTypeCode::kDLInt, 64),
+        ("u", 1) => (DLDataTypeCode::kDLUInt, 8),
+        ("u", 2) => (DLDataTypeCode::kDLUInt, 16),
+        ("u", 4) => (DLDataTypeCode::kDLUInt, 32),
+        ("u", 8) => (DLDataTypeCode::kDLUInt, 64),
+        _ => return Err(Error::Serialization(format!("unsupported type descriptor: {}", descr))),
+    };
+
+    Ok((code, bits, is_little_endian))
+}
+
 // Read a data array from the given reader, using numpy's NPY format
 fn read_data<R, F>(mut reader: R, create_array: &F) -> Result<(mts_array_t, Vec<usize>), Error>
     where R: std::io::Read, F: Fn(Vec<usize>) -> Result<mts_array_t, Error>
@@ -144,24 +178,81 @@ fn read_data<R, F>(mut reader: R, create_array: &F) -> Result<(mts_array_t, Vec<
     let shape = header.shape;
     let mut array = create_array(shape.clone())?;
 
-    match header.type_descriptor {
-        DataType::Scalar(s) if s == "<f8" => {
-            reader.read_f64_into::<LittleEndian>(array.data_mut()?)?;
-        }
-        DataType::Scalar(s) if s == ">f8" => {
-            reader.read_f64_into::<BigEndian>(array.data_mut()?)?;
-        }
-        _ => {
-            return Err(Error::Serialization(format!(
-                "unknown type for data array, expected 64-bit floating points, got {}",
-                header.type_descriptor
-            )));
-        }
+    let num_elements: usize = shape.iter().product();
+    if num_elements == 0 {
+        check_for_extra_bytes(&mut reader)?;
+        return Ok((array, shape));
+    }
+
+    let device = DLDevice::cpu();
+    let version = DLPackVersion::current();
+    let dl_tensor = array.as_dlpack(device, None, version)?;
+
+    let descr = match &header.type_descriptor {
+        DataType::Scalar(s) => s.as_str(),
+        _ => return Err(Error::Serialization("structured arrays are not supported".into())),
+    };
+
+    let (file_code, file_bits, is_little_endian) = npy_descr_to_dtype(descr)?;
+
+    let tensor_ref = dl_tensor.as_ref();
+    let array_dtype = tensor_ref.raw.dtype;
+    
+    if array_dtype.code != file_code || array_dtype.bits != file_bits {
+        return Err(Error::Serialization(format!(
+            "array dtype ({:?}, {} bits) does not match file dtype ({:?}, {} bits)",
+            array_dtype.code, array_dtype.bits, file_code, file_bits
+        )));
+    }
+
+    match (file_code, file_bits, is_little_endian) {
+        (DLDataTypeCode::kDLFloat, 32, true) => read_values::<_, f32, _>(&mut reader, &tensor_ref.raw, |r| r.read_f32::<LittleEndian>())?,
+        (DLDataTypeCode::kDLFloat, 32, false) => read_values::<_, f32, _>(&mut reader, &tensor_ref.raw, |r| r.read_f32::<BigEndian>())?,
+        (DLDataTypeCode::kDLFloat, 64, true) => read_values::<_, f64, _>(&mut reader, &tensor_ref.raw, |r| r.read_f64::<LittleEndian>())?,
+        (DLDataTypeCode::kDLFloat, 64, false) => read_values::<_, f64, _>(&mut reader, &tensor_ref.raw, |r| r.read_f64::<BigEndian>())?,
+        (DLDataTypeCode::kDLInt, 8, _) => read_values::<_, i8, _>(&mut reader, &tensor_ref.raw, |r| r.read_i8())?,
+        (DLDataTypeCode::kDLInt, 16, true) => read_values::<_, i16, _>(&mut reader, &tensor_ref.raw, |r| r.read_i16::<LittleEndian>())?,
+        (DLDataTypeCode::kDLInt, 16, false) => read_values::<_, i16, _>(&mut reader, &tensor_ref.raw, |r| r.read_i16::<BigEndian>())?,
+        (DLDataTypeCode::kDLInt, 32, true) => read_values::<_, i32, _>(&mut reader, &tensor_ref.raw, |r| r.read_i32::<LittleEndian>())?,
+        (DLDataTypeCode::kDLInt, 32, false) => read_values::<_, i32, _>(&mut reader, &tensor_ref.raw, |r| r.read_i32::<BigEndian>())?,
+        (DLDataTypeCode::kDLInt, 64, true) => read_values::<_, i64, _>(&mut reader, &tensor_ref.raw, |r| r.read_i64::<LittleEndian>())?,
+        (DLDataTypeCode::kDLInt, 64, false) => read_values::<_, i64, _>(&mut reader, &tensor_ref.raw, |r| r.read_i64::<BigEndian>())?,
+        (DLDataTypeCode::kDLUInt, 8, _) => read_values::<_, u8, _>(&mut reader, &tensor_ref.raw, |r| r.read_u8())?,
+        (DLDataTypeCode::kDLUInt, 16, true) => read_values::<_, u16, _>(&mut reader, &tensor_ref.raw, |r| r.read_u16::<LittleEndian>())?,
+        (DLDataTypeCode::kDLUInt, 16, false) => read_values::<_, u16, _>(&mut reader, &tensor_ref.raw, |r| r.read_u16::<BigEndian>())?,
+        (DLDataTypeCode::kDLUInt, 32, true) => read_values::<_, u32, _>(&mut reader, &tensor_ref.raw, |r| r.read_u32::<LittleEndian>())?,
+        (DLDataTypeCode::kDLUInt, 32, false) => read_values::<_, u32, _>(&mut reader, &tensor_ref.raw, |r| r.read_u32::<BigEndian>())?,
+        (DLDataTypeCode::kDLUInt, 64, true) => read_values::<_, u64, _>(&mut reader, &tensor_ref.raw, |r| r.read_u64::<LittleEndian>())?,
+        (DLDataTypeCode::kDLUInt, 64, false) => read_values::<_, u64, _>(&mut reader, &tensor_ref.raw, |r| r.read_u64::<BigEndian>())?,
+        _ => return Err(Error::Serialization(format!(
+            "unsupported dtype for reading: {:?} {} bits", file_code, file_bits
+        ))),
     }
 
     check_for_extra_bytes(&mut reader)?;
-
     return Ok((array, shape));
+}
+
+fn read_values<R, T, F>(reader: &mut R, tensor: &DLTensor, read_fn: F) -> Result<(), Error>
+where
+    R: std::io::Read,
+    T: Copy + DLPackPointerCast + 'static,
+    F: Fn(&mut R) -> std::io::Result<T>,
+{
+    // SAFETY: The DLTensor is borrowed for the duration of this function,
+    // and we trust the caller to provide a valid tensor.
+    let tensor_ref = unsafe { DLPackTensorRefMut::from_raw(tensor.clone()) };
+    let mut view = ndarray::ArrayViewMutD::<T>::try_from(tensor_ref)
+        .map_err(|e| Error::Serialization(format!("failed to create array view: {}", e)))?;
+
+    // NPY files are always C-contiguous (row-major) flattened arrays.
+    // Iterating over the view in standard order corresponds to the logical order
+    // of elements, which matches the file order.
+    for value in view.iter_mut() {
+        *value = read_fn(reader)?;
+    }
+
+    Ok(())
 }
 
 pub(super) fn write_single_block<W: std::io::Write + std::io::Seek>(
@@ -263,16 +354,16 @@ fn write_data<W: std::io::Write>(writer: &mut W, array: &mts_array_t) -> Result<
     // Dispatch based on Dtype
     // Generic type inference; the closure dictates the type T.
     match (code, bits) {
-        (DLDataTypeCode::kDLFloat, 32) => write_values(writer, tensor_ref, |w, v| w.write_f32::<LittleEndian>(v))?,
-        (DLDataTypeCode::kDLFloat, 64) => write_values(writer, tensor_ref, |w, v| w.write_f64::<LittleEndian>(v))?,
+        (DLDataTypeCode::kDLFloat, 32) => write_values(writer, tensor_ref, |w, v| w.write_f32::<NativeEndian>(v))?,
+        (DLDataTypeCode::kDLFloat, 64) => write_values(writer, tensor_ref, |w, v| w.write_f64::<NativeEndian>(v))?,
         (DLDataTypeCode::kDLInt, 8) => write_values(writer, tensor_ref, |w, v| w.write_i8(v))?,
-        (DLDataTypeCode::kDLInt, 16) => write_values(writer, tensor_ref, |w, v| w.write_i16::<LittleEndian>(v))?,
-        (DLDataTypeCode::kDLInt, 32) => write_values(writer, tensor_ref, |w, v| w.write_i32::<LittleEndian>(v))?,
-        (DLDataTypeCode::kDLInt, 64) => write_values(writer, tensor_ref, |w, v| w.write_i64::<LittleEndian>(v))?,
+        (DLDataTypeCode::kDLInt, 16) => write_values(writer, tensor_ref, |w, v| w.write_i16::<NativeEndian>(v))?,
+        (DLDataTypeCode::kDLInt, 32) => write_values(writer, tensor_ref, |w, v| w.write_i32::<NativeEndian>(v))?,
+        (DLDataTypeCode::kDLInt, 64) => write_values(writer, tensor_ref, |w, v| w.write_i64::<NativeEndian>(v))?,
         (DLDataTypeCode::kDLUInt, 8) => write_values(writer, tensor_ref, |w, v| w.write_u8(v))?,
-        (DLDataTypeCode::kDLUInt, 16) => write_values(writer, tensor_ref, |w, v| w.write_u16::<LittleEndian>(v))?,
-        (DLDataTypeCode::kDLUInt, 32) => write_values(writer, tensor_ref, |w, v| w.write_u32::<LittleEndian>(v))?,
-        (DLDataTypeCode::kDLUInt, 64) => write_values(writer, tensor_ref, |w, v| w.write_u64::<LittleEndian>(v))?,
+        (DLDataTypeCode::kDLUInt, 16) => write_values(writer, tensor_ref, |w, v| w.write_u16::<NativeEndian>(v))?,
+        (DLDataTypeCode::kDLUInt, 32) => write_values(writer, tensor_ref, |w, v| w.write_u32::<NativeEndian>(v))?,
+        (DLDataTypeCode::kDLUInt, 64) => write_values(writer, tensor_ref, |w, v| w.write_u64::<NativeEndian>(v))?,
         _ => return Err(Error::Serialization(format!("unsupported dtype: {:?} {}", code, bits))),
     }
 
