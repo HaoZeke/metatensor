@@ -2,7 +2,7 @@ use std::io::BufReader;
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use byteorder::{LittleEndian, ReadBytesExt, BigEndian};
+use byteorder::{LittleEndian, ReadBytesExt, BigEndian, WriteBytesExt};
 use zip::{ZipArchive, ZipWriter};
 use dlpk::sys::{DLDataTypeCode, DLDevice, DLDeviceType, DLPackVersion, DLPACK_MAJOR_VERSION, DLPACK_MINOR_VERSION};
 use dlpk::sys::DLPACK_FLAG_BITMASK_READ_ONLY;
@@ -260,49 +260,39 @@ fn write_data<W: std::io::Write>(writer: &mut W, array: &mts_array_t) -> Result<
         return Ok(());
     }
 
-    // Write using ndarray views to handle strides
-    // XXX: Couldn't this somehow live in dlpk...?
-    macro_rules! write_via_view {
-        ($t:ty) => {{
-            let view: ArrayViewD<$t> = tensor_ref.try_into()
-                .map_err(|e| Error::Serialization(format!("DLPack to ndarray conversion failed: {:?}", e)))?;
-            
-            if let Some(slice) = view.as_slice() {
-                let slice: &[$t] = slice;
-                let ptr = slice.as_ptr();
-                let len = slice.len();
-                let bytes = unsafe {
-                    std::slice::from_raw_parts(
-                        ptr as *const u8,
-                        len * std::mem::size_of::<$t>()
-                    )
-                };
-                writer.write_all(bytes)?;
-            } else {
-                for val in view.iter() {
-                    let ptr = val as *const $t as *const u8;
-                    let bytes = unsafe {
-                        std::slice::from_raw_parts(ptr, std::mem::size_of::<$t>())
-                    };
-                    writer.write_all(bytes)?;
-                }
-            }
-        }}
+    // Dispatch based on Dtype
+    // Generic type inference; the closure dictates the type T.
+    match (code, bits) {
+        (DLDataTypeCode::kDLFloat, 32) => write_values(writer, tensor_ref, |w, v| w.write_f32::<LittleEndian>(v))?,
+        (DLDataTypeCode::kDLFloat, 64) => write_values(writer, tensor_ref, |w, v| w.write_f64::<LittleEndian>(v))?,
+        (DLDataTypeCode::kDLInt, 8) => write_values(writer, tensor_ref, |w, v| w.write_i8(v))?,
+        (DLDataTypeCode::kDLInt, 16) => write_values(writer, tensor_ref, |w, v| w.write_i16::<LittleEndian>(v))?,
+        (DLDataTypeCode::kDLInt, 32) => write_values(writer, tensor_ref, |w, v| w.write_i32::<LittleEndian>(v))?,
+        (DLDataTypeCode::kDLInt, 64) => write_values(writer, tensor_ref, |w, v| w.write_i64::<LittleEndian>(v))?,
+        (DLDataTypeCode::kDLUInt, 8) => write_values(writer, tensor_ref, |w, v| w.write_u8(v))?,
+        (DLDataTypeCode::kDLUInt, 16) => write_values(writer, tensor_ref, |w, v| w.write_u16::<LittleEndian>(v))?,
+        (DLDataTypeCode::kDLUInt, 32) => write_values(writer, tensor_ref, |w, v| w.write_u32::<LittleEndian>(v))?,
+        (DLDataTypeCode::kDLUInt, 64) => write_values(writer, tensor_ref, |w, v| w.write_u64::<LittleEndian>(v))?,
+        _ => return Err(Error::Serialization(format!("unsupported dtype: {:?} {}", code, bits))),
     }
 
-    // Dispatch based on Dtype
-    match (code, bits) {
-        (DLDataTypeCode::kDLFloat, 32) => write_via_view!(f32),
-        (DLDataTypeCode::kDLFloat, 64) => write_via_view!(f64),
-        (DLDataTypeCode::kDLInt, 8) => write_via_view!(i8),
-        (DLDataTypeCode::kDLInt, 16) => write_via_view!(i16),
-        (DLDataTypeCode::kDLInt, 32) => write_via_view!(i32),
-        (DLDataTypeCode::kDLInt, 64) => write_via_view!(i64),
-        (DLDataTypeCode::kDLUInt, 8) => write_via_view!(u8),
-        (DLDataTypeCode::kDLUInt, 16) => write_via_view!(u16),
-        (DLDataTypeCode::kDLUInt, 32) => write_via_view!(u32),
-        (DLDataTypeCode::kDLUInt, 64) => write_via_view!(u64),
-        _ => return Err(Error::Serialization(format!("unsupported dtype: {:?} {}", code, bits))),
+    Ok(())
+}
+
+fn write_values<'a, W, T, F, Tensor>(writer: &mut W, tensor: Tensor, write_fn: F) -> Result<(), Error>
+where
+    W: std::io::Write,
+    T: Copy + 'static,
+    F: Fn(&mut W, T) -> std::io::Result<()>,
+    Tensor: TryInto<ArrayViewD<'a, T>>,
+    <Tensor as TryInto<ArrayViewD<'a, T>>>::Error: std::fmt::Debug,
+{
+    let view: ArrayViewD<T> = tensor
+        .try_into()
+        .map_err(|e| Error::Serialization(format!("DLPack conversion failed: {:?}", e)))?;
+
+    for &val in view.iter() {
+        write_fn(writer, val)?;
     }
 
     Ok(())
