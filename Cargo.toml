@@ -8,3 +8,7 @@ members = [
     "rust/metatensor-sys",
     "python",
 ]
+
+
+[patch.crates-io]
+dlpk = { git = "https://github.com/HaoZeke/dlpack-fork", branch="upd_1.2" }

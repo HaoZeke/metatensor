@@ -5,6 +5,9 @@ use std::sync::Arc;
 use byteorder::{LittleEndian, ReadBytesExt, BigEndian};
 use zip::{ZipArchive, ZipWriter};
 use dlpk::sys::{DLDataTypeCode, DLDevice, DLDeviceType, DLPackVersion, DLPACK_MAJOR_VERSION, DLPACK_MINOR_VERSION};
+use dlpk::sys::DLPACK_FLAG_BITMASK_READ_ONLY;
+use ndarray::ArrayViewD;
+use std::convert::TryInto;
 
 use super::npy_header::{Header, DataType};
 use super::{check_for_extra_bytes, PathOrBuffer};
@@ -225,23 +228,24 @@ fn dlpack_to_npy_descr(code: DLDataTypeCode, bits: u8) -> Result<String, Error> 
 
 // Write an array to the given writer, using numpy's NPY format
 fn write_data<W: std::io::Write>(writer: &mut W, array: &mts_array_t) -> Result<(), Error> {
-    let device = DLDevice {
-        device_type: DLDeviceType::kDLCPU,
-        device_id: 0,
-    };
-    let version = DLPackVersion {
-        major: DLPACK_MAJOR_VERSION,
-        // XXX: https://github.com/metatensor/dlpk/pull/16
-        // we bundle dlpack.h @ 1.2 in metatensor...
-        minor: DLPACK_MINOR_VERSION + 1,
-    };
+    let device = DLDevice::cpu();
+    let version = DLPackVersion::current();
+    
+    // Get DLPack Tensor
     let dl_tensor = array.as_dlpack(device, None, version)?;
     let tensor_ref = dl_tensor.as_ref();
     let dtype = tensor_ref.raw.dtype;
     let (code, bits) = (dtype.code, dtype.bits);
 
-    let tdesc = dlpack_to_npy_descr(code, bits)?;
+    // Validate Lanes
+    if dtype.lanes != 1 {
+        return Err(Error::Serialization(format!(
+            "unsupported DLPack dtype: lanes != 1 ({})", dtype.lanes
+        )));
+    }
 
+    // Write Header
+    let tdesc = super::block::dlpack_to_npy_descr(code, bits)?;
     let header = Header {
         type_descriptor: DataType::Scalar(tdesc.into()),
         fortran_order: false,
@@ -256,36 +260,50 @@ fn write_data<W: std::io::Write>(writer: &mut W, array: &mts_array_t) -> Result<
         return Ok(());
     }
 
-    // check dtype lanes == 1 (no vector lanes)
-    let lanes = tensor_ref.raw.dtype.lanes;
-    if lanes != 1 {
-        return Err(Error::Serialization(format!(
-            "unsupported DLPack dtype: lanes != 1 ({})", lanes
-        )));
+    // Write using ndarray views to handle strides
+    // XXX: Couldn't this somehow live in dlpk...?
+    macro_rules! write_via_view {
+        ($t:ty) => {{
+            let view: ArrayViewD<$t> = tensor_ref.try_into()
+                .map_err(|e| Error::Serialization(format!("DLPack to ndarray conversion failed: {:?}", e)))?;
+            
+            if let Some(slice) = view.as_slice() {
+                let slice: &[$t] = slice;
+                let ptr = slice.as_ptr();
+                let len = slice.len();
+                let bytes = unsafe {
+                    std::slice::from_raw_parts(
+                        ptr as *const u8,
+                        len * std::mem::size_of::<$t>()
+                    )
+                };
+                writer.write_all(bytes)?;
+            } else {
+                for val in view.iter() {
+                    let ptr = val as *const $t as *const u8;
+                    let bytes = unsafe {
+                        std::slice::from_raw_parts(ptr, std::mem::size_of::<$t>())
+                    };
+                    writer.write_all(bytes)?;
+                }
+            }
+        }}
     }
 
-    // Calculate total bytes using the DLPack metadata
-    // NOTE: won't work if types are not byte aligned
-    let element_bytes = (bits as usize) / 8;
-    let total_bytes = num_elements
-        .checked_mul(element_bytes)
-        .ok_or_else(|| Error::Serialization("size overflow".into()))?;
-
-    // Get the base data pointer (void*) and add byte_offset in bytes.
-    let raw = &tensor_ref.raw;
-    let base_ptr = raw.data as *const u8;
-    let offset_bytes = tensor_ref.raw.byte_offset as usize;
-
-    // pointer arithmetic in bytes:
-    let data_ptr = unsafe { base_ptr.add(offset_bytes) };
-
-    if data_ptr.is_null() {
-        return Ok(());
+    // Dispatch based on Dtype
+    match (code, bits) {
+        (DLDataTypeCode::kDLFloat, 32) => write_via_view!(f32),
+        (DLDataTypeCode::kDLFloat, 64) => write_via_view!(f64),
+        (DLDataTypeCode::kDLInt, 8) => write_via_view!(i8),
+        (DLDataTypeCode::kDLInt, 16) => write_via_view!(i16),
+        (DLDataTypeCode::kDLInt, 32) => write_via_view!(i32),
+        (DLDataTypeCode::kDLInt, 64) => write_via_view!(i64),
+        (DLDataTypeCode::kDLUInt, 8) => write_via_view!(u8),
+        (DLDataTypeCode::kDLUInt, 16) => write_via_view!(u16),
+        (DLDataTypeCode::kDLUInt, 32) => write_via_view!(u32),
+        (DLDataTypeCode::kDLUInt, 64) => write_via_view!(u64),
+        _ => return Err(Error::Serialization(format!("unsupported dtype: {:?} {}", code, bits))),
     }
 
-    // create byte slice and write
-    let data_slice = unsafe { std::slice::from_raw_parts(data_ptr, total_bytes) };
-    writer.write_all(data_slice)?;
-
-    return Ok(());
+    Ok(())
 }
