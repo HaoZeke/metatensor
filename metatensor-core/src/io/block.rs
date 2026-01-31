@@ -393,40 +393,61 @@ fn write_data<W: std::io::Write>(writer: &mut W, array: &mts_array_t) -> Result<
         return Ok(());
     }
 
-    // Dispatch based on Dtype
-    // Generic type inference; the closure dictates the type T.
+    macro_rules! write_as {
+        ($ty:ty, $writer:expr, $tensor:expr, $write_call:expr) => {{
+            let shape: Vec<usize> = $tensor.shape()
+                .iter()
+                .map(|&x| x as usize)
+                .collect();
+
+            // Forcefully cast for Bool -> u8
+            let view = unsafe {
+                let data_ptr = $tensor.raw.data as *const $ty;
+                ndarray::ArrayViewD::from_shape_ptr(shape, data_ptr)
+            };
+
+            for &val in view.iter() {
+                // Explicit match to handle the error without relying on '?' inference
+                match $write_call($writer, val) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        let err = <crate::Error as From<std::io::Error>>::from(e);
+                        return Err(err);
+                    }
+                }
+            }
+            // Explicitly hint the return type to the compiler
+            Ok::<(), crate::Error>(())
+        }}
+    }
+
     match (code, bits) {
-        (DLDataTypeCode::kDLFloat, 32) => write_values(writer, tensor_ref, |w, v| w.write_f32::<NativeEndian>(v))?,
-        (DLDataTypeCode::kDLFloat, 64) => write_values(writer, tensor_ref, |w, v| w.write_f64::<NativeEndian>(v))?,
-        (DLDataTypeCode::kDLInt, 8) => write_values(writer, tensor_ref, |w, v| w.write_i8(v))?,
-        (DLDataTypeCode::kDLInt, 16) => write_values(writer, tensor_ref, |w, v| w.write_i16::<NativeEndian>(v))?,
-        (DLDataTypeCode::kDLInt, 32) => write_values(writer, tensor_ref, |w, v| w.write_i32::<NativeEndian>(v))?,
-        (DLDataTypeCode::kDLInt, 64) => write_values(writer, tensor_ref, |w, v| w.write_i64::<NativeEndian>(v))?,
-        (DLDataTypeCode::kDLUInt, 8) => write_values(writer, tensor_ref, |w, v| w.write_u8(v))?,
-        (DLDataTypeCode::kDLUInt, 16) => write_values(writer, tensor_ref, |w, v| w.write_u16::<NativeEndian>(v))?,
-        (DLDataTypeCode::kDLUInt, 32) => write_values(writer, tensor_ref, |w, v| w.write_u32::<NativeEndian>(v))?,
-        (DLDataTypeCode::kDLUInt, 64) => write_values(writer, tensor_ref, |w, v| w.write_u64::<NativeEndian>(v))?,
-        _ => return Err(Error::Serialization(format!("unsupported dtype: {:?} {}", code, bits))),
+        (DLDataTypeCode::kDLFloat, 32) => write_as!(f32, writer, tensor_ref, |w: &mut W, v| w.write_f32::<NativeEndian>(v)),
+        (DLDataTypeCode::kDLFloat, 64) => write_as!(f64, writer, tensor_ref, |w: &mut W, v| w.write_f64::<NativeEndian>(v)),
+        
+        (DLDataTypeCode::kDLInt, 8) => write_as!(i8, writer, tensor_ref, |w: &mut W, v| w.write_i8(v)),
+        (DLDataTypeCode::kDLInt, 16) => write_as!(i16, writer, tensor_ref, |w: &mut W, v| w.write_i16::<NativeEndian>(v)),
+        (DLDataTypeCode::kDLInt, 32) => write_as!(i32, writer, tensor_ref, |w: &mut W, v| w.write_i32::<NativeEndian>(v)),
+        (DLDataTypeCode::kDLInt, 64) => write_as!(i64, writer, tensor_ref, |w: &mut W, v| w.write_i64::<NativeEndian>(v)),
+        
+        (DLDataTypeCode::kDLUInt, 8) => write_as!(u8, writer, tensor_ref, |w: &mut W, v| w.write_u8(v)),
+        (DLDataTypeCode::kDLUInt, 16) => write_as!(u16, writer, tensor_ref, |w: &mut W, v| w.write_u16::<NativeEndian>(v)),
+        (DLDataTypeCode::kDLUInt, 32) => write_as!(u32, writer, tensor_ref, |w: &mut W, v| w.write_u32::<NativeEndian>(v)),
+        (DLDataTypeCode::kDLUInt, 64) => write_as!(u64, writer, tensor_ref, |w: &mut W, v| w.write_u64::<NativeEndian>(v)),
+
+        (DLDataTypeCode::kDLBool, 8) => write_as!(u8, writer, tensor_ref, |w: &mut W, v| w.write_u8(v)),
+        
+        (DLDataTypeCode::kDLComplex, 64) => write_as!([f32; 2], writer, tensor_ref, |w: &mut W, v: [f32; 2]| { 
+            w.write_f32::<NativeEndian>(v[0])?; 
+            w.write_f32::<NativeEndian>(v[1]) 
+        }),
+        (DLDataTypeCode::kDLComplex, 128) => write_as!([f64; 2], writer, tensor_ref, |w: &mut W, v: [f64; 2]| { 
+            w.write_f64::<NativeEndian>(v[0])?; 
+            w.write_f64::<NativeEndian>(v[1]) 
+        }),
+        
+        (DLDataTypeCode::kDLFloat, 16) => write_as!(u16, writer, tensor_ref, |w: &mut W, v| w.write_u16::<NativeEndian>(v)),
+
+        _ => Err(Error::Serialization(format!("unsupported dtype: {:?} {}", code, bits))),
     }
-
-    Ok(())
-}
-
-fn write_values<'a, W, T, F, Tensor>(writer: &mut W, tensor: Tensor, write_fn: F) -> Result<(), Error>
-where
-    W: std::io::Write,
-    T: Copy + 'static,
-    F: Fn(&mut W, T) -> std::io::Result<()>,
-    Tensor: TryInto<ArrayViewD<'a, T>>,
-    <Tensor as TryInto<ArrayViewD<'a, T>>>::Error: std::fmt::Debug,
-{
-    let view: ArrayViewD<T> = tensor
-        .try_into()
-        .map_err(|e| Error::Serialization(format!("DLPack conversion failed: {:?}", e)))?;
-
-    for &val in view.iter() {
-        write_fn(writer, val)?;
-    }
-
-    Ok(())
 }
