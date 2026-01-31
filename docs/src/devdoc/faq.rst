@@ -3,25 +3,64 @@
 Developer FAQ
 =============
 
-This section addresses common questions and hurdles encountered when developing 
+This section addresses common questions and hurdles encountered when developing
 with the ecosystem.
+
+How do I use environment variables to control tests?
+----------------------------------------------------
+
+The ``tox`` configuration supports several environment variables to customize
+test execution. Setting these directly in your shell provides a less hermetic
+but much lighter way to approximate the configurations found in the :ref:`devdoc-local-ci`
+without the overhead of Docker containers.
+
+.. list-table::
+   :widths: 40 60
+   :header-rows: 1
+
+   * - Variable
+     - Description
+   * - ``METATENSOR_TESTS_TORCH_VERSION``
+     - Sets the ``torch`` version (e.g., ``"2.2"``).
+   * - ``METATENSOR_TESTS_NUMPY_VERSION_PIN``
+     - Pins the ``numpy`` version (e.g., ``"<2.0"``).
+   * - ``PIP_EXTRA_INDEX_URL``
+     - Provides an additional URL to find packages (e.g., for CPU-only torch).
+   * - ``METATENSOR_BUILD_TYPE``
+     - Set to ``release`` to compile Rust components with optimizations.
+
+.. important::
+
+   When running ``tox`` locally, your host Python version must be compatible
+   with the ``torch`` version you request. For example, some versions of
+   ``torch`` do not support Python 3.14.
+
+If you encounter dependency resolution errors, ensure you are using a compatible
+Python interpreter. You can use ``tox`` within a specific Python environment:
+
+.. code-block:: bash
+
+    # Use the -x flag to override the base_python for the environment
+    METATENSOR_TESTS_TORCH_VERSION="2.2" \
+    METATENSOR_TESTS_NUMPY_VERSION_PIN="<2.0" \
+    tox -e core-tests -x testenv:core-tests.base_python=python3.11
 
 How do I run the full CI suite locally?
 ---------------------------------------
 
-You can use ``gh act`` to emulate GitHub Actions on your machine. This is 
-useful for catching environment-specific bugs before pushing code. 
+You can use ``gh act`` to emulate GitHub Actions on your machine. This is
+useful for catching environment-specific bugs before pushing code.
 See :ref:`devdoc-local-ci` for setup and usage instructions.
 
 .. note::
 
-  These can be rather heavy for users without workstations. Using
-  ``--action-offline-mode`` after the first run will help.
+   These can be rather heavy for users without workstations. Using
+   ``--action-offline-mode`` after the first run will help.
 
 How do I run just the NumPy < 2.0 tests?
 ----------------------------------------
 
-When using ``gh act``, you can isolate specific matrix configurations by 
+When using ``gh act``, you can isolate specific matrix configurations by
 specifying the matrix keys. To run the legacy NumPy tests:
 
 .. code-block:: bash
@@ -32,11 +71,18 @@ specifying the matrix keys. To run the legacy NumPy tests:
       --matrix torch-version:2.1 \
       --matrix numpy-version-pin:"<2.0"
 
+.. tip::
+
+   If you don't need the full Docker isolation of ``act``, you can also 
+   replicate this legacy environment using :ref:`the environment variables method <devdoc-faq-env-vars>`.
+
+.. _devdoc-faq-env-vars:
+
 How do I run a single tox environment in CI?
 --------------------------------------------
 
-If you are using ``act`` and want to skip the full suite in favor of a 
-single environment (e.g., ``core-tests``), pass the ``TOXENV`` 
+If you are using ``act`` and want to skip the full suite in favor of a
+single environment (e.g., ``core-tests``), pass the ``TOXENV``
 variable:
 
 .. code-block:: bash
@@ -50,7 +96,7 @@ Follow a release PR. Find more `here <https://github.com/metatensor/metatensor/p
 
 .. note::
 
-  The changelog files are managed by hand.
+   The changelog files are managed by hand.
 
 .. list-table::
    :widths: 40 60
@@ -72,7 +118,7 @@ Follow a release PR. Find more `here <https://github.com/metatensor/metatensor/p
 How do I handle new PyTorch versions?
 -------------------------------------
 
-Follow a PyTorch upgrade PR, . Then make a new release.
+Follow a PyTorch upgrade PR. Then make a new release.
 
 .. list-table::
    :widths: 40 60
@@ -93,8 +139,8 @@ We prefer a clean history with logical commits. If your branch has many small
 
 .. note::
 
-  This process is optional, if the changes are related to a single concept, we
-  default to squashing during the merge.
+   This process is optional; if the changes are related to a single concept, we
+   default to squashing during the merge.
 
 - **Interactive Rebase**: To combine the last ``N`` commits, use:
 
