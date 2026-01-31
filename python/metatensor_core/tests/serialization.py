@@ -622,7 +622,8 @@ def test_save_load_info(tensor, use_numpy):
         # Boolean
         np.bool_,
         # TODO: Complex
-        # np.complex64, np.complex128,
+        np.complex64,
+        np.complex128,
     ],
 )
 def test_save_dtypes(tmp_path, dtype):
