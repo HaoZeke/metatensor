@@ -5,6 +5,7 @@ use std::sync::Arc;
 use byteorder::{LittleEndian, BigEndian, NativeEndian, WriteBytesExt, ReadBytesExt};
 use zip::{ZipArchive, ZipWriter};
 use dlpk::sys::{DLDataTypeCode, DLDevice, DLPackVersion};
+use ndarray::ShapeBuilder;
 
 use super::npy_header::{Header, DataType};
 use super::{check_for_extra_bytes, PathOrBuffer};
@@ -216,7 +217,7 @@ fn read_data<R, F>(mut reader: R, create_array: &F) -> Result<(mts_array_t, Vec<
             // SAFETY: We trust the caller (match block) to match the byte size correctly.
             let mut view = unsafe {
                 let data_ptr = $tensor.raw.data as *mut $ty;
-                ndarray::ArrayViewMutD::from_shape_ptr(shape, data_ptr)
+                ndarray::ArrayViewMutD::from_shape_ptr(ndarray::IxDyn(&shape), data_ptr)
             };
 
             for value in view.iter_mut() {
@@ -388,10 +389,22 @@ fn write_data<W: std::io::Write>(writer: &mut W, array: &mts_array_t) -> Result<
                 .map(|&x| x as usize)
                 .collect();
 
-            // Forcefully cast for Bool -> u8
+            // SAFETY: DLPack guarantees data_ptr is valid for shape/strides.
+            // Construct an ndarray View that respects the input layout.
+            // Forcefully cast for Bool -> u8 
             let view = unsafe {
                 let data_ptr = $tensor.raw.data as *const $ty;
-                ndarray::ArrayViewD::from_shape_ptr(shape, data_ptr)
+                let shape_dim = ndarray::IxDyn(&shape);
+                
+                if let Some(dl_strides) = $tensor.strides() {
+                    let strides: Vec<usize> = dl_strides.iter().map(|&x| x as usize).collect();
+                    let strides_dim = ndarray::IxDyn(&strides);
+                    // Create a strided shape: (shape, strides)
+                    ndarray::ArrayViewD::from_shape_ptr(shape_dim.strides(strides_dim), data_ptr)
+                } else {
+                    // Default to C-contiguous if strides are NULL
+                    ndarray::ArrayViewD::from_shape_ptr(shape_dim, data_ptr)
+                }
             };
 
             for &val in view.iter() {

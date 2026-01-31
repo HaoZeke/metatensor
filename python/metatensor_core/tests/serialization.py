@@ -660,3 +660,44 @@ def test_save_dtypes(tmp_path, dtype):
     vals_loaded = archive["blocks/0/values"]
     assert vals_loaded.dtype == dtype
     np.testing.assert_array_equal(vals_loaded, data)
+
+
+@pytest.mark.parametrize("use_numpy", (True, False))
+def test_save_fortran(tmp_path, use_numpy):
+    data = np.array([[1, 2, 3], [4, 5, 6]], dtype=np.float64, order="F")
+
+    block = TensorBlock(
+        values=data,
+        samples=Labels.range("s", 2),
+        components=[],
+        properties=Labels.range("p", 3),
+    )
+    tensor = TensorMap(Labels.single(), [block])
+
+    file_path = tmp_path / "strided_test.mts"
+
+    mts.save(file_path, tensor, use_numpy=use_numpy)
+
+    loaded = mts.load(file_path, use_numpy=True)
+
+    np.testing.assert_array_equal(loaded.block(0).values, data)
+
+
+@pytest.mark.parametrize("use_numpy", (True, False))
+def test_save_strided(tmp_path, use_numpy):
+    data = np.arange(20, dtype=np.float64).reshape(4, 5)[:, ::2]
+
+    block = TensorBlock(
+        values=data,
+        samples=Labels.range("s", 4),
+        components=[],
+        properties=Labels.range("p", 3),
+    )
+    tensor = TensorMap(Labels.single(), [block])
+
+    file_path = tmp_path / "strided_test.mts"
+
+    mts.save(file_path, tensor, use_numpy=use_numpy)
+    loaded = mts.load(file_path, use_numpy=True)
+
+    np.testing.assert_array_equal(loaded.block(0).values, data)
