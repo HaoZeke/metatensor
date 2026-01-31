@@ -96,7 +96,7 @@ impl std::io::Write for ExternalBuffer {
         };
 
         let count = output.write(buf).expect("failed to write to pre-allocated slice");
-       assert_eq!(count, buf.len());
+        assert_eq!(count, buf.len());
         self.current += count as u64;
 
         if self.current > self.writen {

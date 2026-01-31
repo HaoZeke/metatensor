@@ -621,7 +621,6 @@ def test_save_load_info(tensor, use_numpy):
         np.float64,
         # Boolean
         np.bool_,
-        # TODO: Complex
         np.complex64,
         np.complex128,
     ],
