@@ -23,6 +23,7 @@ This developer documentation contains the following sections:
    architecture
    versions
    local-ci
+   faq
 
 Development team
 ----------------
