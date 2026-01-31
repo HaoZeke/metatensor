@@ -4,8 +4,7 @@ use std::sync::Arc;
 
 use byteorder::{LittleEndian, BigEndian, NativeEndian, WriteBytesExt, ReadBytesExt};
 use zip::{ZipArchive, ZipWriter};
-use dlpk::sys::{DLDataTypeCode, DLDevice, DLTensor, DLPackVersion};
-use dlpk::{DLPackPointerCast, DLPackTensorRefMut};
+use dlpk::sys::{DLDataTypeCode, DLDevice, DLPackVersion};
 use ndarray::ArrayViewD;
 use std::convert::TryInto;
 
@@ -184,7 +183,7 @@ fn read_data<R, F>(mut reader: R, create_array: &F) -> Result<(mts_array_t, Vec<
     }
 
     let shape = header.shape;
-    let mut array = create_array(shape.clone())?;
+    let array = create_array(shape.clone())?;
 
     let num_elements: usize = shape.iter().product();
     if num_elements == 0 {
@@ -194,7 +193,7 @@ fn read_data<R, F>(mut reader: R, create_array: &F) -> Result<(mts_array_t, Vec<
 
     let device = DLDevice::cpu();
     let version = DLPackVersion::current();
-    let mut dl_tensor = array.as_dlpack(device, None, version)?;
+    let dl_tensor = array.as_dlpack(device, None, version)?;
 
     let descr = match &header.type_descriptor {
         DataType::Scalar(s) => s.as_str(),
@@ -220,7 +219,7 @@ fn read_data<R, F>(mut reader: R, create_array: &F) -> Result<(mts_array_t, Vec<
                 .map_err(|e| Error::Serialization(format!("tensor cast failed: {}", e)))?;
 
             // Unsafely cast to a MUTABLE view
-            let mut view_mut = unsafe {
+            let view_mut = unsafe {
                 ndarray::ArrayViewMutD::from_shape_ptr(
                     view_ro.raw_dim(), 
                     view_ro.as_ptr() as *mut $ty
