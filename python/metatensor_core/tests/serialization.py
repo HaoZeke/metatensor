@@ -626,11 +626,8 @@ def test_save_load_info(tensor, use_numpy):
     ],
 )
 def test_save_dtypes(tmp_path, dtype):
-    if not np.issubdtype(dtype, np.bool_):
-        data = np.arange(6, dtype=dtype).reshape(2, 3)
-    else
-        data = np.arange(2, dtype=dtype).reshape(-1)
-    if not np.issubdtype(dtype, np.integer):
+    data = np.arange(6).reshape(2, 3).astype(dtype)
+    if np.issubdtype(dtype, np.floating):
         data += 0.1
 
     block = TensorBlock(
