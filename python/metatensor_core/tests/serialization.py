@@ -626,7 +626,10 @@ def test_save_load_info(tensor, use_numpy):
     ],
 )
 def test_save_dtypes(tmp_path, dtype):
-    data = np.arange(6, dtype=dtype).reshape(2, 3)
+    if not np.issubdtype(dtype, np.bool_):
+        data = np.arange(6, dtype=dtype).reshape(2, 3)
+    else
+        data = np.arange(2, dtype=dtype).reshape(-1)
     if not np.issubdtype(dtype, np.integer):
         data += 0.1
 
