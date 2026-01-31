@@ -605,7 +605,26 @@ def test_save_load_info(tensor, use_numpy):
         assert loaded.get_info("test") == "value"
 
 
-@pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float32, np.float64])
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        # Standard Numeric
+        np.int8,
+        np.int16,
+        np.int32,
+        np.int64,
+        np.uint8,
+        np.uint16,
+        np.uint32,
+        np.uint64,
+        np.float32,
+        np.float64,
+        # Boolean
+        np.bool_,
+        # TODO: Complex
+        # np.complex64, np.complex128,
+    ],
+)
 def test_save_dtypes(tmp_path, dtype):
     data = np.arange(6, dtype=dtype).reshape(2, 3)
     if not np.issubdtype(dtype, np.integer):
@@ -635,7 +654,6 @@ def test_save_dtypes(tmp_path, dtype):
     np.testing.assert_array_equal(vals_loaded, data)
 
     # Verify with NumPy
-    # TODO: let the loader handle types too
     # .mts files are ZIP archives of .npy files.
     archive = np.load(file_path)
     vals_loaded = archive["blocks/0/values"]

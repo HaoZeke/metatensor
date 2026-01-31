@@ -164,6 +164,10 @@ fn npy_descr_to_dtype(descr: &str) -> Result<(DLDataTypeCode, u8, Endianness), E
         ("u", 2) => (DLDataTypeCode::kDLUInt, 16),
         ("u", 4) => (DLDataTypeCode::kDLUInt, 32),
         ("u", 8) => (DLDataTypeCode::kDLUInt, 64),
+        ("b", 1) => (DLDataTypeCode::kDLBool, 8),
+        ("c", 8) => (DLDataTypeCode::kDLComplex, 64),
+        ("c", 16) => (DLDataTypeCode::kDLComplex, 128),
+        ("f", 2) => (DLDataTypeCode::kDLFloat, 16),
         _ => return Err(Error::Serialization(format!("unsupported type descriptor: {}", descr))),
     };
 
@@ -252,8 +256,18 @@ fn read_data<R, F>(mut reader: R, create_array: &F) -> Result<(mts_array_t, Vec<
         (DLDataTypeCode::kDLUInt, 64, Endianness::Little) => read_as!(u64, &mut reader, tensor_ref, |r| r.read_u64::<LittleEndian>())?,
         (DLDataTypeCode::kDLUInt, 64, Endianness::Big) => read_as!(u64, &mut reader, tensor_ref, |r| r.read_u64::<BigEndian>())?,
 
+        // TODO: complex support, try_into doesn't work
+        // (DLDataTypeCode::kDLComplex, 64, Endianness::Little) => read_as!([f32; 2], &mut reader, tensor_ref, |r| Ok([r.read_f32::<LittleEndian>()?, r.read_f32::<LittleEndian>()?]))?,
+        // (DLDataTypeCode::kDLComplex, 64, Endianness::Big) => read_as!([f32; 2], &mut reader, tensor_ref, |r| Ok([r.read_f32::<BigEndian>()?, r.read_f32::<BigEndian>()?]))?,
+        // (DLDataTypeCode::kDLComplex, 128, Endianness::Little) => read_as!([f64; 2], &mut reader, tensor_ref, |r| Ok([r.read_f64::<LittleEndian>()?, r.read_f64::<LittleEndian>()?]))?,
+        // (DLDataTypeCode::kDLComplex, 128, Endianness::Big) => read_as!([f64; 2], &mut reader, tensor_ref, |r| Ok([r.read_f64::<BigEndian>()?, r.read_f64::<BigEndian>()?]))?,
+
+        (DLDataTypeCode::kDLFloat, 16, Endianness::Little) => read_as!(u16, &mut reader, tensor_ref, |r| r.read_u16::<LittleEndian>())?,
+        (DLDataTypeCode::kDLFloat, 16, Endianness::Big) => read_as!(u16, &mut reader, tensor_ref, |r| r.read_u16::<BigEndian>())?,
+
         (DLDataTypeCode::kDLUInt, 8, _) => read_as!(u8, &mut reader, tensor_ref, |r| r.read_u8())?,
         (DLDataTypeCode::kDLInt, 8, _) => read_as!(i8, &mut reader, tensor_ref, |r| r.read_i8())?,
+        (DLDataTypeCode::kDLBool, 8, _) => read_as!(u8, &mut reader, tensor_ref, |r| r.read_u8())?,
         
         _ => return Err(Error::Serialization(format!(
             "unsupported dtype for reading: {:?} {} bits", file_code, file_bits
@@ -333,6 +347,10 @@ fn dlpack_to_npy_descr(code: DLDataTypeCode, bits: u8) -> Result<String, Error> 
         (DLDataTypeCode::kDLUInt, 64) => ("u", 8),
         (DLDataTypeCode::kDLFloat, 32) => ("f", 4),
         (DLDataTypeCode::kDLFloat, 64) => ("f", 8),
+        (DLDataTypeCode::kDLBool, 8) => ("b", 1),
+        (DLDataTypeCode::kDLComplex, 64) => ("c", 8),
+        (DLDataTypeCode::kDLComplex, 128) => ("c", 16),
+        (DLDataTypeCode::kDLFloat, 16) => ("f", 2),
         _ => return Err(Error::Serialization(
             format!("unsupported DLPack dtype: code {:?}, bits {:?}", code, bits)
                                             )
