@@ -111,7 +111,7 @@ Follow a release PR. Find more `here <https://github.com/metatensor/metatensor/p
    * - **metatensor-torch**
      - `v0.8.4 <https://github.com/metatensor/metatensor/pull/1042>`_
    * - **metatensor-operations**
-     - `v0.4.0 <https://github.com/metatensor/metatensor/pull/1002>`_
+     - `v0.3.0 <https://github.com/metatensor/metatensor/pull/779>`_
    * - **metatensor-learn**
      - `v0.4.0 <https://github.com/metatensor/metatensor/pull/1003>`_
 
