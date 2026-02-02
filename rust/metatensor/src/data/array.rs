@@ -3,7 +3,7 @@ use std::os::raw::c_void;
 
 use once_cell::sync::Lazy;
 
-use dlpk::sys::{DLDevice, DLDeviceType, DLManagedTensorVersioned, DLPackVersion, DLPACK_MAJOR_VERSION, DLPACK_MINOR_VERSION};
+use dlpk::sys::{DLDevice, DLDeviceType, DLManagedTensorVersioned, DLPackVersion};
 use crate::c_api::{mts_array_t, mts_data_origin_t, mts_sample_mapping_t, mts_status_t};
 use dlpk::{DLPackTensor, GetDLPackDataType};
 
@@ -353,8 +353,7 @@ impl Array for ndarray::ArrayD<f64> {
                 message: "CPU arrays can not be used with a stream".into(),
             });
         }
-        // TODO: cleanup with DLPackVersion::current()
-        let vendored_version = DLPackVersion{major: 1, minor: 1};
+        let vendored_version = DLPackVersion::current();
         let major_mismatch = max_version.major != vendored_version.major;
         let minor_too_high = max_version.minor < vendored_version.minor;
         if major_mismatch || minor_too_high {
@@ -367,8 +366,7 @@ impl Array for ndarray::ArrayD<f64> {
             });
         }
 
-        // TODO: cleanup with DLDevice::cpu()
-        let ndarray_device = DLDevice{device_type: DLDeviceType::kDLCPU, device_id: 0};
+        let ndarray_device = DLDevice::cpu();
 
         if device.device_type != ndarray_device.device_type || device.device_id != ndarray_device.device_id {
             return Err(Error {
@@ -524,11 +522,8 @@ mod tests {
         let mts_array = mts_array_t::from(Box::new(data) as Box<dyn Array>);
         unsafe {
             let mut dl_managed: *mut DLManagedTensorVersioned = std::ptr::null_mut();
-            let device = DLDevice {
-                device_type: DLDeviceType::kDLCPU,
-                device_id: 0,
-            };
-            let max_version = DLPackVersion { major: 1, minor: 1 };
+            let device = DLDevice::cpu();
+            let max_version = DLPackVersion::current();
             let status = (mts_array.as_dlpack.unwrap())(
                 mts_array.ptr,
                 &mut dl_managed,
