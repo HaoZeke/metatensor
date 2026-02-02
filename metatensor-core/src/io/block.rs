@@ -437,7 +437,8 @@ fn write_data<W: std::io::Write>(writer: &mut W, array: &mts_array_t) -> Result<
         (DLDataTypeCode::kDLUInt, 64) => write_as!(u64, writer, tensor_ref, |w: &mut W, v| w.write_u64::<NativeEndian>(v)),
 
         (DLDataTypeCode::kDLBool, 8) => write_as!(u8, writer, tensor_ref, |w: &mut W, v| w.write_u8(v)),
-        
+        (DLDataTypeCode::kDLFloat, 16) => write_as!(u16, writer, tensor_ref, |w: &mut W, v| w.write_u16::<NativeEndian>(v)),        
+
         (DLDataTypeCode::kDLComplex, 64) => write_as!([f32; 2], writer, tensor_ref, |w: &mut W, v: [f32; 2]| { 
             w.write_f32::<NativeEndian>(v[0])?; 
             w.write_f32::<NativeEndian>(v[1]) 
@@ -447,8 +448,6 @@ fn write_data<W: std::io::Write>(writer: &mut W, array: &mts_array_t) -> Result<
             w.write_f64::<NativeEndian>(v[1]) 
         }),
         
-        (DLDataTypeCode::kDLFloat, 16) => write_as!(u16, writer, tensor_ref, |w: &mut W, v| w.write_u16::<NativeEndian>(v)),
-
         _ => Err(Error::Serialization(format!("unsupported dtype: {:?} {}", code, bits))),
     }
 }

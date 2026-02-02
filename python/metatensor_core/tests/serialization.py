@@ -617,10 +617,12 @@ def test_save_load_info(tensor, use_numpy):
         np.uint16,
         np.uint32,
         np.uint64,
+        np.float16,  # aka np.half
         np.float32,
         np.float64,
         # Boolean
         np.bool_,
+        # Complex
         np.complex64,
         np.complex128,
     ],
