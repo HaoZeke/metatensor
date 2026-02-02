@@ -213,10 +213,27 @@ fn read_data<R, F>(mut reader: R, create_array: &F) -> Result<(mts_array_t, Vec<
                 .map(|&x| x as usize)
                 .collect();
 
-            // Unsafe Cast
-            // SAFETY: We trust the caller (match block) to match the byte size correctly.
+            // Apply Byte Offset
+            // DLPack `data` is a raw void pointer so add `byte_offset`.
+            // SAFETY: Trust the caller (match block) to match the byte size correctly.
+            let raw = &$tensor.raw;
+            let base_ptr = raw.data as *mut u8;
+            let effective_ptr = unsafe { base_ptr.add(raw.byte_offset as usize) };
+
+            // Check Alignment
+            let align = std::mem::align_of::<$ty>();
+            if (effective_ptr as usize) % align != 0 {
+                return Err(Error::Serialization(format!(
+                    "DLPack data pointer is not aligned for type {} (ptr: {:p}, align: {})", 
+                    stringify!($ty), effective_ptr, align
+                )));
+            }
+
+            // Create View
+            // SAFETY: Checked alignment above, and trust the shape matches the
+            // allocation size because `create_array` uses the file header.
             let mut view = unsafe {
-                let data_ptr = $tensor.raw.data as *mut $ty;
+                let data_ptr = effective_ptr as *mut $ty;
                 ndarray::ArrayViewMutD::from_shape_ptr(ndarray::IxDyn(&shape), data_ptr)
             };
 
@@ -388,6 +405,21 @@ fn write_data<W: std::io::Write>(writer: &mut W, array: &mts_array_t) -> Result<
                 .iter()
                 .map(|&x| x as usize)
                 .collect();
+
+            // Apply Byte Offset
+            // DLPack `data` is a raw void pointer, so add `byte_offset`.
+            let raw = &$tensor.raw;
+            let base_ptr = raw.data as *const u8;
+            let effective_ptr = unsafe { base_ptr.add(raw.byte_offset as usize) };
+
+            // Check Alignment
+            let align = std::mem::align_of::<$ty>();
+            if (effective_ptr as usize) % align != 0 {
+                return Err(Error::Serialization(format!(
+                    "DLPack data pointer is not aligned for type {} (ptr: {:p}, align: {})", 
+                    stringify!($ty), effective_ptr, align
+                )));
+            }
 
             // SAFETY: DLPack guarantees data_ptr is valid for shape/strides.
             // Construct an ndarray View that respects the input layout.
