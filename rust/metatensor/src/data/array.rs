@@ -3,10 +3,9 @@ use std::os::raw::c_void;
 
 use once_cell::sync::Lazy;
 
-use dlpk::sys::{DLDevice, DLDeviceType, DLManagedTensorVersioned, DLPackVersion};
+use dlpk::sys::{DLDevice, DLManagedTensorVersioned, DLPackVersion};
 use crate::c_api::{mts_array_t, mts_data_origin_t, mts_sample_mapping_t, mts_status_t};
-use dlpk::{DLPackTensor, GetDLPackDataType};
-
+use dlpk::DLPackTensor;
 
 use crate::errors::Error;
 
@@ -378,52 +377,12 @@ impl Array for ndarray::ArrayD<f64> {
             });
         }
 
-        // Use the indirection as in torch to not clone data
-        // The shape and strides vectors are leaked and will be cleaned up by the deleter.
-        let shape: Vec<i64> = self.shape().iter().map(|&s| s as i64).collect();
-        let strides: Vec<i64> = self.strides().iter().map(|&s| s as i64).collect();
-        let ndim = self.ndim();
-        
-        let shape_ptr = Box::into_raw(shape.into_boxed_slice()) as *mut i64;
-        let strides_ptr = Box::into_raw(strides.into_boxed_slice()) as *mut i64;
-        
-        let dl_tensor = dlpk::sys::DLTensor {
-            data: self.as_ptr() as *mut c_void,
-            device: ndarray_device,
-            ndim: ndim as i32,
-            dtype: f64::get_dlpack_data_type(),
-            shape: shape_ptr,
-            strides: strides_ptr,
-            byte_offset: 0,
-        };
+        // This copies the data into a new DLPackTensor because `ndarray::ArrayD` here implies strict ownership.
+        let tensor: DLPackTensor = self.clone().try_into().map_err(|e| Error {
+            code: Some(crate::c_api::MTS_INVALID_PARAMETER_ERROR),
+            message: format!("failed to convert ndarray to DLPack: {:?}", e),
+        })?;
 
-        // Deleter that cleans up the leaked shape and strides
-        unsafe extern "C" fn deleter(tensor: *mut DLManagedTensorVersioned) {
-            if tensor.is_null() {
-                return;
-            }
-            let t = &(*tensor).dl_tensor;
-            let ndim = t.ndim as usize;
-            if !t.shape.is_null() && ndim > 0 {
-                let _ = Box::from_raw(std::ptr::slice_from_raw_parts_mut(t.shape, ndim));
-            }
-            if !t.strides.is_null() && ndim > 0 {
-                let _ = Box::from_raw(std::ptr::slice_from_raw_parts_mut(t.strides, ndim));
-            }
-        }
-
-        let managed = DLManagedTensorVersioned {
-            version: vendored_version,
-            manager_ctx: std::ptr::null_mut(),
-            deleter: Some(deleter),
-            flags: 0,
-            dl_tensor,
-        };
-
-        // SAFETY: The data pointer points to self's data. The caller must ensure
-        // that self outlives the returned DLPackTensor.
-        let tensor = unsafe { DLPackTensor::from_raw(managed) };
-        
         Ok(tensor)
     }
 }
@@ -494,9 +453,8 @@ impl Array for EmptyArray {
 
 #[cfg(test)]
 mod tests {
-    use dlpk::sys::{DLDataTypeCode, DLDeviceType};
     use metatensor_sys::{MTS_SUCCESS, mts_array_t};
-    use dlpk::sys::{DLDevice, DLManagedTensorVersioned, DLPackVersion};
+    use dlpk::sys::{DLDevice, DLManagedTensorVersioned, DLPackVersion, DLDataTypeCode};
     use crate::Array;
 
 
@@ -548,5 +506,4 @@ mod tests {
             }
         }
     }
-
 }
