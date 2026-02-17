@@ -212,6 +212,44 @@ namespace io {
         return TensorMap(ptr);
     }
 
+    /// Load a TensorMap from the file at `path` using memory mapping,
+    /// selecting only a subset of data based on optional key, sample, and
+    /// property filters. Pass `nullptr` for any filter to select all entries
+    /// along that axis.
+    inline TensorMap load_mmap_partial(
+        const std::string& path,
+        const Labels* keys,
+        const Labels* samples,
+        const Labels* properties
+    ) {
+        mts_labels_t keys_raw;
+        std::memset(&keys_raw, 0, sizeof(keys_raw));
+        if (keys != nullptr) {
+            keys_raw = keys->as_mts_labels_t();
+        }
+
+        mts_labels_t samples_raw;
+        std::memset(&samples_raw, 0, sizeof(samples_raw));
+        if (samples != nullptr) {
+            samples_raw = samples->as_mts_labels_t();
+        }
+
+        mts_labels_t properties_raw;
+        std::memset(&properties_raw, 0, sizeof(properties_raw));
+        if (properties != nullptr) {
+            properties_raw = properties->as_mts_labels_t();
+        }
+
+        auto* ptr = mts_tensormap_load_mmap_partial(
+            path.c_str(),
+            keys_raw,
+            samples_raw,
+            properties_raw
+        );
+        details::check_pointer(ptr);
+        return TensorMap(ptr);
+    }
+
     inline TensorBlock load_block_mmap(const std::string& path) {
         auto* ptr = mts_block_load_mmap(path.c_str());
         details::check_pointer(ptr);

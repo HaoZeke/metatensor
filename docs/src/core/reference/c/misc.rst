@@ -55,6 +55,7 @@ Tensors
 - :c:func:`mts_tensormap_save`: serialize and save a ``mts_tensormap_t`` to a file
 - :c:func:`mts_tensormap_load`: load a serialized ``mts_tensormap_t`` from a file
 - :c:func:`mts_tensormap_load_mmap`: load a ``mts_tensormap_t`` using memory mapping
+- :c:func:`mts_tensormap_load_mmap_partial`: selectively load a ``mts_tensormap_t`` using memory mapping with label filters
 - :c:func:`mts_tensormap_save_buffer`: serialize and save a ``mts_tensormap_t``
   to a in-memory buffer
 - :c:func:`mts_tensormap_load_buffer`: load a serialized ``mts_tensormap_t`` from
@@ -63,6 +64,8 @@ Tensors
 .. doxygenfunction:: mts_tensormap_load
 
 .. doxygenfunction:: mts_tensormap_load_mmap
+
+.. doxygenfunction:: mts_tensormap_load_mmap_partial
 
 .. doxygenfunction:: mts_tensormap_save
 

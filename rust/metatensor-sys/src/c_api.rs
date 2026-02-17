@@ -506,4 +506,11 @@ extern "C" {
         realloc: mts_realloc_buffer_t,
         tensor: *const mts_tensormap_t,
     ) -> mts_status_t;
+
+    pub fn mts_tensormap_load_mmap_partial(
+        path: *const ::std::os::raw::c_char,
+        keys: mts_labels_t,
+        samples: mts_labels_t,
+        properties: mts_labels_t,
+    ) -> *mut mts_tensormap_t;
 }

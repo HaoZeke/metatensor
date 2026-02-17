@@ -27,7 +27,7 @@ enum ArrayTag {
 
 /// Byte storage backed by `Vec<u64>` for guaranteed 8-byte alignment.
 /// This covers all common numeric dtypes (f64, f32, f16, i64, i32, i16, i8, u8).
-struct AlignedBytes {
+pub(super) struct AlignedBytes {
     storage: Vec<u64>,
     byte_len: usize,
 }
@@ -61,7 +61,7 @@ impl AlignedBytes {
         self.storage.as_ptr() as *const u8
     }
 
-    fn as_mut_slice(&mut self) -> &mut [u8] {
+    pub(super) fn as_mut_slice(&mut self) -> &mut [u8] {
         unsafe { std::slice::from_raw_parts_mut(self.storage.as_mut_ptr() as *mut u8, self.byte_len) }
     }
 
@@ -83,7 +83,7 @@ impl Clone for AlignedBytes {
 // Helper: element size from DLDataType
 // ============================================================================
 
-fn element_size(dtype: &DLDataType) -> usize {
+pub(super) fn element_size(dtype: &DLDataType) -> usize {
     (dtype.bits as usize / 8) * dtype.lanes as usize
 }
 
@@ -323,9 +323,9 @@ unsafe extern "C" fn mmap_array_destroy(array: *mut c_void) {
 // ============================================================================
 
 #[repr(C)]
-struct MmapCreatedArray {
+pub(super) struct MmapCreatedArray {
     tag: ArrayTag,
-    data: Arc<AlignedBytes>,
+    pub(super) data: Arc<AlignedBytes>,
     shape: Vec<usize>,
     dl_dtype: DLDataType,
 }
@@ -334,7 +334,7 @@ unsafe impl Send for MmapCreatedArray {}
 unsafe impl Sync for MmapCreatedArray {}
 
 impl MmapCreatedArray {
-    fn into_mts_array(self: Box<Self>) -> mts_array_t {
+    pub(super) fn into_mts_array(self: Box<Self>) -> mts_array_t {
         mts_array_t {
             ptr: Box::into_raw(self).cast(),
             origin: Some(created_array_origin),
@@ -351,7 +351,7 @@ impl MmapCreatedArray {
 }
 
 /// Create a zeroed MmapCreatedArray with the given shape and dtype.
-fn new_created_array(shape: &[usize], dl_dtype: DLDataType) -> Box<MmapCreatedArray> {
+pub(super) fn new_created_array(shape: &[usize], dl_dtype: DLDataType) -> Box<MmapCreatedArray> {
     let elem = element_size(&dl_dtype);
     let total_bytes = shape.iter().product::<usize>() * elem;
     Box::new(MmapCreatedArray {

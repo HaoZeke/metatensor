@@ -35,6 +35,11 @@ a changelog](https://keepachangelog.com/en/1.1.0/) format. This project follows
   `TensorBlock::load_mmap`. In Python, use `metatensor.load_mmap` and
   `metatensor.load_block_mmap`.
 
+- Added `mts_tensormap_load_mmap_partial` C API function for selectively loading
+  data from `.mts` files with key, sample, and property filters. Only matching
+  blocks and data rows/columns are loaded. C++ wrapper:
+  `metatensor::io::load_mmap_partial`. Python: `metatensor.load_mmap_partial`.
+
 ### Removed
 
 - Removed `mts_array_t.data` function pointer and all corresponding

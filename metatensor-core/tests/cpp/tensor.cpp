@@ -494,6 +494,129 @@ TEST_CASE("TensorMap mmap loading") {
     }
 }
 
+TEST_CASE("TensorMap partial mmap loading") {
+    SECTION("full match equals load_mmap") {
+        auto full = TensorMap::load_mmap(TEST_DATA_MTS_PATH);
+        auto partial = metatensor::io::load_mmap_partial(TEST_DATA_MTS_PATH);
+
+        CHECK(full.keys() == partial.keys());
+
+        for (uintptr_t i = 0; i < full.keys().count(); i++) {
+            auto fb = full.block_by_id(i);
+            auto pb = partial.block_by_id(i);
+            CHECK(fb.values_shape() == pb.values_shape());
+            CHECK(fb.samples() == pb.samples());
+            CHECK(fb.properties() == pb.properties());
+        }
+    }
+
+    SECTION("key filtering") {
+        auto full = TensorMap::load_mmap(TEST_DATA_MTS_PATH);
+        auto all_keys = full.keys();
+
+        // Select first 3 keys using raw pointer constructor
+        auto raw_names = all_keys.names();
+        auto str_names = std::vector<std::string>(raw_names.begin(), raw_names.end());
+        // values() returns NDArray<int32_t> in row-major [count x size]
+        auto key_sel = Labels(str_names, all_keys.values().data(), 3);
+
+        auto partial = metatensor::io::load_mmap_partial(
+            TEST_DATA_MTS_PATH, &key_sel
+        );
+
+        CHECK(partial.keys().count() == 3);
+        CHECK(partial.keys().names().size() == all_keys.names().size());
+
+        for (uintptr_t i = 0; i < 3; i++) {
+            auto fb = full.block_by_id(i);
+            auto pb = partial.block_by_id(i);
+            CHECK(fb.values_shape() == pb.values_shape());
+            CHECK(fb.samples() == pb.samples());
+            CHECK(fb.properties() == pb.properties());
+        }
+    }
+
+    SECTION("sample filtering") {
+        auto full = TensorMap::load_mmap(TEST_DATA_MTS_PATH);
+        auto sample_sel = Labels({"system"}, {{0}});
+
+        auto partial = metatensor::io::load_mmap_partial(
+            TEST_DATA_MTS_PATH, nullptr, &sample_sel
+        );
+
+        CHECK(partial.keys().count() == full.keys().count());
+
+        for (uintptr_t i = 0; i < partial.keys().count(); i++) {
+            auto fb = full.block_by_id(i);
+            auto pb = partial.block_by_id(i);
+
+            CHECK(pb.samples().count() <= fb.samples().count());
+            CHECK(fb.properties() == pb.properties());
+        }
+    }
+
+    SECTION("property filtering") {
+        auto full = TensorMap::load_mmap(TEST_DATA_MTS_PATH);
+        auto prop_sel = Labels({"n"}, {{0}});
+
+        auto partial = metatensor::io::load_mmap_partial(
+            TEST_DATA_MTS_PATH, nullptr, nullptr, &prop_sel
+        );
+
+        CHECK(partial.keys().count() == full.keys().count());
+
+        for (uintptr_t i = 0; i < partial.keys().count(); i++) {
+            auto fb = full.block_by_id(i);
+            auto pb = partial.block_by_id(i);
+
+            CHECK(fb.samples() == pb.samples());
+            CHECK(pb.properties().count() <= fb.properties().count());
+        }
+    }
+
+    SECTION("empty key match") {
+        auto key_sel = Labels(
+            {"o3_lambda", "o3_sigma", "center_type", "neighbor_type"},
+            {{999, 999, 999, 999}}
+        );
+
+        auto partial = metatensor::io::load_mmap_partial(
+            TEST_DATA_MTS_PATH, &key_sel
+        );
+
+        CHECK(partial.keys().count() == 0);
+    }
+
+    SECTION("gradient reindexing after sample filtering") {
+        auto sample_sel = Labels({"system"}, {{0}});
+
+        auto partial = metatensor::io::load_mmap_partial(
+            TEST_DATA_MTS_PATH, nullptr, &sample_sel
+        );
+
+        for (uintptr_t i = 0; i < partial.keys().count(); i++) {
+            auto pb = partial.block_by_id(i);
+            auto n_samples = pb.samples().count();
+
+            auto grad = pb.gradient("positions");
+            auto grad_samples = grad.samples();
+            const auto& grad_values = grad_samples.values();
+            // gradient samples have "sample" as first column (index 0)
+            for (uintptr_t j = 0; j < grad_samples.count(); j++) {
+                // values() is row-major [count x size], column 0 is the parent sample index
+                auto parent_idx = grad_values.data()[j * grad_samples.size()];
+                CHECK(static_cast<uintptr_t>(parent_idx) < n_samples);
+            }
+        }
+    }
+
+    SECTION("load_mmap_partial via namespace function with no selection") {
+        auto tensor = metatensor::io::load_mmap_partial(TEST_DATA_MTS_PATH);
+        CHECK(tensor.keys().count() == 27);
+    }
+}
+
+
 TEST_CASE("TensorBlock mmap loading") {
     SECTION("load_block_mmap matches regular load") {
         auto block = TensorBlock::load(TEST_BLOCK_MTS_PATH);

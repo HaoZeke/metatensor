@@ -223,6 +223,75 @@ pub unsafe extern "C" fn mts_tensormap_load_mmap(
     return result;
 }
 
+/// Load a tensor map from the file at the given path using memory mapping,
+/// selecting only a subset of data based on keys, samples, and properties.
+///
+/// Each `mts_labels_t` parameter acts as a filter:
+/// - if `internal_ptr_` is NULL and `count` is 0 (i.e. a zero-initialized
+///   struct), all entries along that axis are selected.
+/// - otherwise, only matching entries are included.
+///
+/// The memory allocated by this function should be released using
+/// `mts_tensormap_free`.
+///
+/// @param path path to the file as a NULL-terminated UTF-8 string
+/// @param keys selection for which blocks to load (empty = all)
+/// @param samples selection for which sample rows to keep (empty = all)
+/// @param properties selection for which property columns to keep (empty = all)
+///
+/// @returns A pointer to the newly allocated tensor map, or a `NULL` pointer in
+///          case of error. In case of error, you can use `mts_last_error()`
+///          to get the error message.
+#[no_mangle]
+pub unsafe extern "C" fn mts_tensormap_load_mmap_partial(
+    path: *const c_char,
+    keys: super::super::labels::mts_labels_t,
+    samples: super::super::labels::mts_labels_t,
+    properties: super::super::labels::mts_labels_t,
+) -> *mut mts_tensormap_t {
+    let mut result = std::ptr::null_mut();
+    let unwind_wrapper = std::panic::AssertUnwindSafe(&mut result);
+    let status = catch_unwind(move || {
+        check_pointers_non_null!(path);
+
+        let path = CStr::from_ptr(path).to_str().expect("use UTF-8 for path");
+
+        // Convert labels: empty (NULL internal_ptr_ and count==0) means "select all"
+        let keys_opt = if keys.internal_ptr_.is_null() && keys.count == 0 {
+            None
+        } else {
+            Some(super::super::labels::mts_labels_to_rust(&keys)?)
+        };
+        let samples_opt = if samples.internal_ptr_.is_null() && samples.count == 0 {
+            None
+        } else {
+            Some(super::super::labels::mts_labels_to_rust(&samples)?)
+        };
+        let properties_opt = if properties.internal_ptr_.is_null() && properties.count == 0 {
+            None
+        } else {
+            Some(super::super::labels::mts_labels_to_rust(&properties)?)
+        };
+
+        let tensor = crate::io::load_mmap_partial(
+            path,
+            keys_opt.as_deref(),
+            samples_opt.as_deref(),
+            properties_opt.as_deref(),
+        )?;
+
+        let _ = &unwind_wrapper;
+        *(unwind_wrapper.0) = mts_tensormap_t::into_boxed_raw(tensor);
+        Ok(())
+    });
+
+    if !status.is_success() {
+        return std::ptr::null_mut();
+    }
+
+    return result;
+}
+
 fn wrap_create_array(create_array: &mts_create_array_callback_t) -> impl Fn(Vec<usize>) -> Result<mts_array_t, Error> + '_ {
     |shape: Vec<usize>| {
         let mut array = mts_array_t::null();

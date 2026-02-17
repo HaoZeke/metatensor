@@ -231,6 +231,255 @@ mod operations_mmap {
     }
 }
 
+mod partial_mmap {
+    use metatensor::{Labels, LabelsBuilder};
+
+    const DATA_PATH: &str = "../../metatensor-core/tests/data.mts";
+
+    /// Build Labels from dynamic name list and selected rows of an existing Labels.
+    fn labels_from_rows(source: &Labels, row_indices: &[usize]) -> Labels {
+        let names: Vec<&str> = source.names().iter().map(|s| &**s).collect();
+        let mut builder = LabelsBuilder::new(names);
+        for &idx in row_indices {
+            builder.add(&source[idx]);
+        }
+        builder.finish()
+    }
+
+    /// Passing None for all selections should produce the same result as load_mmap.
+    #[test]
+    fn full_match_equals_load_mmap() {
+        let full = metatensor::io::load_mmap(DATA_PATH).unwrap();
+        let partial = metatensor::io::load_mmap_partial(DATA_PATH, None, None, None).unwrap();
+
+        assert_eq!(full.keys().names(), partial.keys().names());
+        assert_eq!(full.keys().count(), partial.keys().count());
+
+        for i in 0..full.keys().count() {
+            let fb = full.block_by_id(i);
+            let pb = partial.block_by_id(i);
+
+            let fv = fb.values();
+            let pv = pb.values();
+            assert_eq!(
+                fv.as_raw().shape().unwrap(),
+                pv.as_raw().shape().unwrap(),
+                "block {i} shape mismatch"
+            );
+
+            assert_eq!(fb.samples().count(), pb.samples().count());
+            assert_eq!(fb.properties().count(), pb.properties().count());
+
+            // check gradients
+            assert_eq!(fb.gradient_list(), pb.gradient_list());
+            for param in fb.gradient_list() {
+                let fg = fb.gradient(param).unwrap();
+                let pg = pb.gradient(param).unwrap();
+
+                let fgv = fg.values();
+                let pgv = pg.values();
+                assert_eq!(
+                    fgv.as_raw().shape().unwrap(),
+                    pgv.as_raw().shape().unwrap(),
+                    "block {i} gradient '{param}' shape mismatch"
+                );
+                assert_eq!(fg.samples().count(), pg.samples().count());
+            }
+        }
+    }
+
+    /// Filter by keys only: select specific blocks.
+    #[test]
+    fn key_filtering() {
+        let full = metatensor::io::load_mmap(DATA_PATH).unwrap();
+        let all_keys = full.keys();
+
+        // Select the first 3 keys
+        let selection_keys = labels_from_rows(&all_keys, &[0, 1, 2]);
+
+        let partial = metatensor::io::load_mmap_partial(
+            DATA_PATH,
+            Some(&selection_keys),
+            None,
+            None,
+        ).unwrap();
+
+        assert_eq!(partial.keys().count(), 3);
+        assert_eq!(partial.keys().names(), all_keys.names());
+
+        // Each block should have the same data as the corresponding full block
+        for i in 0..3 {
+            let fb = full.block_by_id(i);
+            let pb = partial.block_by_id(i);
+
+            let fv = fb.values();
+            let pv = pb.values();
+            assert_eq!(
+                fv.as_raw().shape().unwrap(),
+                pv.as_raw().shape().unwrap(),
+            );
+            assert_eq!(fb.samples().count(), pb.samples().count());
+            assert_eq!(fb.properties().count(), pb.properties().count());
+        }
+    }
+
+    /// Filter by samples only: keep a subset of rows.
+    #[test]
+    fn sample_filtering() {
+        let full = metatensor::io::load_mmap(DATA_PATH).unwrap();
+
+        // Select only samples where system==0
+        let sample_sel = Labels::new(["system"], &[[0_i32]]);
+
+        let partial = metatensor::io::load_mmap_partial(
+            DATA_PATH,
+            None,
+            Some(&sample_sel),
+            None,
+        ).unwrap();
+
+        // Should have same number of blocks
+        assert_eq!(full.keys().count(), partial.keys().count());
+
+        for i in 0..partial.keys().count() {
+            let fb = full.block_by_id(i);
+            let pb = partial.block_by_id(i);
+
+            // Partial should have <= samples
+            assert!(pb.samples().count() <= fb.samples().count());
+
+            // All partial samples should have system==0
+            for entry in pb.samples().iter() {
+                assert_eq!(entry[0].i32(), 0, "block {i}: expected system==0");
+            }
+
+            // Properties should be unchanged
+            assert_eq!(fb.properties().count(), pb.properties().count());
+        }
+    }
+
+    /// Filter by properties only: keep a subset of columns.
+    #[test]
+    fn property_filtering() {
+        let full = metatensor::io::load_mmap(DATA_PATH).unwrap();
+
+        // Select only properties where n==0
+        let prop_sel = Labels::new(["n"], &[[0_i32]]);
+
+        let partial = metatensor::io::load_mmap_partial(
+            DATA_PATH,
+            None,
+            None,
+            Some(&prop_sel),
+        ).unwrap();
+
+        assert_eq!(full.keys().count(), partial.keys().count());
+
+        for i in 0..partial.keys().count() {
+            let fb = full.block_by_id(i);
+            let pb = partial.block_by_id(i);
+
+            // Samples should be unchanged
+            assert_eq!(fb.samples().count(), pb.samples().count());
+
+            // Partial should have <= properties
+            assert!(pb.properties().count() <= fb.properties().count());
+
+            // All partial properties should have n==0
+            for entry in pb.properties().iter() {
+                assert_eq!(entry[0].i32(), 0, "block {i}: expected n==0");
+            }
+
+            // Check gradient properties also filtered
+            for param in pb.gradient_list() {
+                let pg = pb.gradient(param).unwrap();
+                for entry in pg.properties().iter() {
+                    assert_eq!(entry[0].i32(), 0, "block {i} gradient '{param}': expected n==0");
+                }
+            }
+        }
+    }
+
+    /// Combined key + sample + property filtering.
+    #[test]
+    fn combined_filtering() {
+        let full = metatensor::io::load_mmap(DATA_PATH).unwrap();
+        let all_keys = full.keys();
+
+        // Select first 5 keys
+        let key_sel = labels_from_rows(&all_keys, &[0, 1, 2, 3, 4]);
+
+        let sample_sel = Labels::new(["system"], &[[0_i32]]);
+        let prop_sel = Labels::new(["n"], &[[0_i32]]);
+
+        let partial = metatensor::io::load_mmap_partial(
+            DATA_PATH,
+            Some(&key_sel),
+            Some(&sample_sel),
+            Some(&prop_sel),
+        ).unwrap();
+
+        assert_eq!(partial.keys().count(), 5);
+
+        for i in 0..5 {
+            let pb = partial.block_by_id(i);
+            for entry in pb.samples().iter() {
+                assert_eq!(entry[0].i32(), 0);
+            }
+            for entry in pb.properties().iter() {
+                assert_eq!(entry[0].i32(), 0);
+            }
+        }
+    }
+
+    /// Gradient sample[0] should be correctly reindexed after sample filtering.
+    #[test]
+    fn gradient_reindexing() {
+        let sample_sel = Labels::new(["system"], &[[0_i32]]);
+
+        let partial = metatensor::io::load_mmap_partial(
+            DATA_PATH,
+            None,
+            Some(&sample_sel),
+            None,
+        ).unwrap();
+
+        for i in 0..partial.keys().count() {
+            let pb = partial.block_by_id(i);
+            let n_samples = pb.samples().count();
+
+            for param in pb.gradient_list() {
+                let pg = pb.gradient(param).unwrap();
+                for entry in pg.samples().iter() {
+                    let parent_idx = entry[0].i32();
+                    assert!(
+                        (parent_idx as usize) < n_samples,
+                        "block {i} gradient '{param}': parent sample index {parent_idx} >= n_samples {n_samples}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Selecting keys that don't exist in the file should produce an empty TensorMap.
+    #[test]
+    fn empty_key_match() {
+        let key_sel = Labels::new(
+            ["o3_lambda", "o3_sigma", "center_type", "neighbor_type"],
+            &[[999_i32, 999, 999, 999]],
+        );
+
+        let partial = metatensor::io::load_mmap_partial(
+            DATA_PATH,
+            Some(&key_sel),
+            None,
+            None,
+        ).unwrap();
+
+        assert_eq!(partial.keys().count(), 0);
+    }
+}
+
 mod block_mmap {
     const DATA_PATH: &str = "../../metatensor-core/tests/block.mts";
 

@@ -192,6 +192,19 @@ namespace metatensor {
         /// mmap-backed arrays.
         TensorMap load_mmap(const std::string& path);
 
+        /// Load a previously saved `TensorMap` from the given path using
+        /// memory-mapped I/O, selecting only a subset of data.
+        ///
+        /// Each `Labels` pointer acts as a filter:
+        /// - `nullptr` selects all entries along that axis
+        /// - otherwise, only matching entries are included
+        TensorMap load_mmap_partial(
+            const std::string& path,
+            const Labels* keys = nullptr,
+            const Labels* samples = nullptr,
+            const Labels* properties = nullptr
+        );
+
         /// Load a previously saved `TensorBlock` from the given path using
         /// memory-mapped I/O. Arrays are created internally as read-only
         /// mmap-backed arrays.

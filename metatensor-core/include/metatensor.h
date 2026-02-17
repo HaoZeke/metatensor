@@ -1298,6 +1298,32 @@ struct mts_tensormap_t *mts_tensormap_load_buffer(const uint8_t *buffer,
 struct mts_tensormap_t *mts_tensormap_load_mmap(const char *path);
 
 /**
+ * Load a tensor map from the file at the given path using memory mapping,
+ * selecting only a subset of data based on keys, samples, and properties.
+ *
+ * Each `mts_labels_t` parameter acts as a filter:
+ * - if `internal_ptr_` is NULL and `count` is 0 (i.e. a zero-initialized
+ *   struct), all entries along that axis are selected.
+ * - otherwise, only matching entries are included.
+ *
+ * The memory allocated by this function should be released using
+ * `mts_tensormap_free`.
+ *
+ * @param path path to the file as a NULL-terminated UTF-8 string
+ * @param keys selection for which blocks to load (empty = all)
+ * @param samples selection for which sample rows to keep (empty = all)
+ * @param properties selection for which property columns to keep (empty = all)
+ *
+ * @returns A pointer to the newly allocated tensor map, or a `NULL` pointer in
+ *          case of error. In case of error, you can use `mts_last_error()`
+ *          to get the error message.
+ */
+struct mts_tensormap_t *mts_tensormap_load_mmap_partial(const char *path,
+                                                        struct mts_labels_t keys,
+                                                        struct mts_labels_t samples,
+                                                        struct mts_labels_t properties);
+
+/**
  * Save a tensor map to the file at the given path.
  *
  * If the file already exists, it is overwritten. The recomended file extension
