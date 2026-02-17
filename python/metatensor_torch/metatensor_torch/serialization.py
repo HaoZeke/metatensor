@@ -166,6 +166,58 @@ def load_mmap(file: str) -> TensorMap:
 load_mmap.__annotations__["file"] = Union[str, pathlib.Path]
 
 
+_EMPTY_LABELS = Labels(names=["_"], values=torch.zeros(0, 1, dtype=torch.int32))
+
+
+def load_mmap_partial(
+    file: str,
+    keys: Labels = _EMPTY_LABELS,
+    samples: Labels = _EMPTY_LABELS,
+    properties: Labels = _EMPTY_LABELS,
+) -> TensorMap:
+    """
+    Load a previously saved :py:class:`TensorMap` from the given ``file`` using
+    memory-mapped I/O, selecting only a subset of data.
+
+    Each :py:class:`Labels` parameter acts as a filter:
+
+    - an empty Labels (zero entries, the default) selects all entries along
+      that axis
+    - otherwise, only matching entries are included
+
+    :param file: path of the file to load.
+    :param keys: selection for which blocks to load.
+    :param samples: selection for which sample rows to keep.
+    :param properties: selection for which property columns to keep.
+
+        .. warning::
+
+            When using this function in TorchScript mode, only ``str`` arguments
+            for ``file`` are supported.
+    """
+    if torch.jit.is_scripting():
+        assert isinstance(file, str)
+        return torch.ops.metatensor.load_mmap_partial(
+            file=file, keys=keys, samples=samples, properties=properties
+        )
+    else:
+        if isinstance(file, str):
+            path = file
+        elif isinstance(file, pathlib.Path):
+            path = str(file.resolve())
+        else:
+            raise TypeError(
+                "load_mmap_partial only supports file paths (str or Path), "
+                "not file-like objects"
+            )
+        return torch.ops.metatensor.load_mmap_partial(
+            file=path, keys=keys, samples=samples, properties=properties
+        )
+
+
+load_mmap_partial.__annotations__["file"] = Union[str, pathlib.Path]
+
+
 def load_block_mmap(file: str) -> TensorBlock:
     """
     Load a previously saved :py:class:`TensorBlock` from the given ``file`` using

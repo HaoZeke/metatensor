@@ -51,6 +51,15 @@ TensorMap metatensor_torch::load_mmap(const std::string& path) {
     return TensorMapHolder::load_mmap(path);
 }
 
+TensorMap metatensor_torch::load_mmap_partial(
+    const std::string& path,
+    Labels keys,
+    Labels samples,
+    Labels properties
+) {
+    return TensorMapHolder::load_mmap_partial(path, keys, samples, properties);
+}
+
 void metatensor_torch::save(const std::string& path, TensorMap tensor) {
     tensor->save(path);
 }

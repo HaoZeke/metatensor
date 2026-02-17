@@ -27,6 +27,7 @@ if os.environ.get("METATENSOR_IMPORT_FOR_SPHINX", "0") != "0" or TYPE_CHECKING:
     from .serialization import (  # noqa: F811, E402
         load_block_mmap,
         load_mmap,
+        load_mmap_partial,
     )
 else:
     _load_library()
@@ -48,6 +49,7 @@ from .serialization import (  # noqa: F401, E402
     load_block_mmap,
     load_labels,
     load_mmap,
+    load_mmap_partial,
     save,
 )
 

@@ -4,11 +4,15 @@ import json
 import pathlib
 import warnings
 import zipfile
-from typing import BinaryIO, Union
+from typing import TYPE_CHECKING, BinaryIO, Optional, Union
 
 import numpy as np
 
-from .._c_api import mts_create_array_callback_t
+
+if TYPE_CHECKING:
+    from ..labels import Labels
+
+from .._c_api import mts_create_array_callback_t, mts_labels_t
 from .._c_lib import _get_library
 from ..tensor import TensorMap
 from ._block import (
@@ -162,6 +166,54 @@ def load_mmap(path: Union[str, pathlib.Path]) -> TensorMap:
     path = path.encode("utf8")
 
     ptr = lib.mts_tensormap_load_mmap(path)
+
+    return TensorMap._from_ptr(ptr)
+
+
+def load_mmap_partial(
+    path: Union[str, pathlib.Path],
+    keys: "Optional[Labels]" = None,
+    samples: "Optional[Labels]" = None,
+    properties: "Optional[Labels]" = None,
+) -> TensorMap:
+    """
+    Load a previously saved :py:class:`TensorMap` from the given path using
+    memory-mapped I/O, selecting only a subset of data.
+
+    Each parameter acts as a filter:
+
+    - ``None`` (the default) selects all entries along that axis
+    - a :py:class:`Labels` instance selects only matching entries
+
+    :param path: path of the file to load
+    :param keys: selection for which blocks to load
+    :param samples: selection for which sample rows to keep in each block
+    :param properties: selection for which property columns to keep in each
+        block
+    """
+    from ..data.extract import _ensure_mmap_origin_registered
+    from ..labels import Labels
+
+    lib = _get_library()
+    _ensure_mmap_origin_registered()
+
+    if isinstance(path, pathlib.Path):
+        path = str(path)
+
+    path = path.encode("utf8")
+
+    def _labels_or_empty(sel):
+        if sel is None:
+            return mts_labels_t()
+        assert isinstance(sel, Labels)
+        return sel._as_mts_labels_t()
+
+    ptr = lib.mts_tensormap_load_mmap_partial(
+        path,
+        _labels_or_empty(keys),
+        _labels_or_empty(samples),
+        _labels_or_empty(properties),
+    )
 
     return TensorMap._from_ptr(ptr)
 

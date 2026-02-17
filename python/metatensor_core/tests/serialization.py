@@ -925,6 +925,198 @@ def test_mmap_operations_compatibility():
     assert reloaded.keys == tensor.keys
 
 
+def test_load_mmap_partial_full_match():
+    """Passing no selections should match load_mmap."""
+    path = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "..",
+        "metatensor-core",
+        "tests",
+        "data.mts",
+    )
+
+    full = mts.load_mmap(path)
+    partial = mts.load_mmap_partial(path)
+
+    assert full.keys == partial.keys
+    for i in range(len(full.keys)):
+        fb = full.block_by_id(i)
+        pb = partial.block_by_id(i)
+        assert fb.values.shape == pb.values.shape
+        assert fb.samples == pb.samples
+        assert fb.properties == pb.properties
+
+
+def test_load_mmap_partial_key_filtering():
+    """Selecting specific keys returns only those blocks."""
+    path = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "..",
+        "metatensor-core",
+        "tests",
+        "data.mts",
+    )
+
+    full = mts.load_mmap(path)
+    all_keys = full.keys
+
+    # Select first 3 keys
+    names = all_keys.names
+    values = all_keys.values[:3]
+    key_sel = Labels(names=names, values=values)
+
+    partial = mts.load_mmap_partial(path, keys=key_sel)
+
+    assert len(partial.keys) == 3
+    assert partial.keys.names == all_keys.names
+
+    for i in range(3):
+        fb = full.block_by_id(i)
+        pb = partial.block_by_id(i)
+        assert fb.values.shape == pb.values.shape
+        assert fb.samples == pb.samples
+        assert fb.properties == pb.properties
+
+
+def test_load_mmap_partial_sample_filtering():
+    """Selecting samples filters rows in each block."""
+    path = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "..",
+        "metatensor-core",
+        "tests",
+        "data.mts",
+    )
+
+    full = mts.load_mmap(path)
+    sample_sel = Labels(
+        names=["system"],
+        values=np.array([[0]], dtype=np.int32),
+    )
+
+    partial = mts.load_mmap_partial(path, samples=sample_sel)
+
+    assert len(partial.keys) == len(full.keys)
+
+    for i in range(len(partial.keys)):
+        fb = full.block_by_id(i)
+        pb = partial.block_by_id(i)
+
+        assert len(pb.samples) <= len(fb.samples)
+        assert fb.properties == pb.properties
+
+        # All samples should have system==0
+        for j in range(len(pb.samples)):
+            assert pb.samples[j][0] == 0
+
+
+def test_load_mmap_partial_property_filtering():
+    """Selecting properties filters columns in each block."""
+    path = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "..",
+        "metatensor-core",
+        "tests",
+        "data.mts",
+    )
+
+    full = mts.load_mmap(path)
+    prop_sel = Labels(
+        names=["n"],
+        values=np.array([[0]], dtype=np.int32),
+    )
+
+    partial = mts.load_mmap_partial(path, properties=prop_sel)
+
+    assert len(partial.keys) == len(full.keys)
+
+    for i in range(len(partial.keys)):
+        fb = full.block_by_id(i)
+        pb = partial.block_by_id(i)
+
+        assert fb.samples == pb.samples
+        assert len(pb.properties) <= len(fb.properties)
+
+
+def test_load_mmap_partial_gradient_reindexing():
+    """Gradient sample[0] is correctly reindexed after sample filtering."""
+    path = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "..",
+        "metatensor-core",
+        "tests",
+        "data.mts",
+    )
+
+    sample_sel = Labels(
+        names=["system"],
+        values=np.array([[0]], dtype=np.int32),
+    )
+
+    partial = mts.load_mmap_partial(path, samples=sample_sel)
+
+    for i in range(len(partial.keys)):
+        pb = partial.block_by_id(i)
+        n_samples = len(pb.samples)
+
+        for param in pb.gradients_list():
+            pg = pb.gradient(param)
+            for j in range(len(pg.samples)):
+                parent_idx = int(pg.samples[j][0])
+                assert parent_idx < n_samples
+
+
+def test_load_mmap_partial_empty_key_match():
+    """Selecting nonexistent keys should produce an empty TensorMap."""
+    path = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "..",
+        "metatensor-core",
+        "tests",
+        "data.mts",
+    )
+
+    key_sel = Labels(
+        names=["o3_lambda", "o3_sigma", "center_type", "neighbor_type"],
+        values=np.array([[999, 999, 999, 999]], dtype=np.int32),
+    )
+
+    partial = mts.load_mmap_partial(path, keys=key_sel)
+
+    assert len(partial.keys) == 0
+
+
+def test_load_mmap_partial_pathlib():
+    """Test load_mmap_partial with pathlib.Path."""
+    path = Path(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "..",
+            "metatensor-core",
+            "tests",
+            "data.mts",
+        )
+    )
+
+    tensor = mts.load_mmap_partial(path)
+    assert isinstance(tensor, TensorMap)
+    assert len(tensor.keys) == 27
+
+
 @pytest.mark.parametrize("use_numpy", (True, False))
 def test_save_fortran(tmp_path, use_numpy):
     data = np.array([[1, 2, 3], [4, 5, 6]], dtype=np.float64, order="F")

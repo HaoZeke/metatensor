@@ -449,6 +449,14 @@ def setup_functions(lib):
     ]
     lib.mts_tensormap_load_mmap.restype = POINTER(mts_tensormap_t)
 
+    lib.mts_tensormap_load_mmap_partial.argtypes = [
+        ctypes.c_char_p,
+        mts_labels_t,
+        mts_labels_t,
+        mts_labels_t,
+    ]
+    lib.mts_tensormap_load_mmap_partial.restype = POINTER(mts_tensormap_t)
+
     lib.mts_tensormap_save.argtypes = [
         ctypes.c_char_p,
         POINTER(mts_tensormap_t),

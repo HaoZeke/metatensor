@@ -424,6 +424,128 @@ def test_mmap_operations_compatibility(tensor_path):
     check_tensor(reloaded)
 
 
+def test_load_mmap_partial_full_match(tensor_path):
+    """Passing no selections should match load_mmap."""
+    full = mts.load_mmap(tensor_path)
+    partial = mts.load_mmap_partial(tensor_path)
+
+    assert full.keys == partial.keys
+    for i in range(len(full.keys)):
+        fb = full.block_by_id(i)
+        pb = partial.block_by_id(i)
+        assert fb.values.shape == pb.values.shape
+        assert fb.samples == pb.samples
+        assert fb.properties == pb.properties
+
+
+def test_load_mmap_partial_key_filtering(tensor_path):
+    """Selecting specific keys returns only those blocks."""
+    full = mts.load_mmap(tensor_path)
+    all_keys = full.keys
+
+    # Select first 3 keys
+    key_sel = Labels(
+        names=all_keys.names,
+        values=all_keys.values[:3],
+    )
+
+    partial = mts.load_mmap_partial(tensor_path, keys=key_sel)
+
+    assert len(partial.keys) == 3
+    assert partial.keys.names == all_keys.names
+
+    for i in range(3):
+        fb = full.block_by_id(i)
+        pb = partial.block_by_id(i)
+        assert fb.values.shape == pb.values.shape
+        assert fb.samples == pb.samples
+        assert fb.properties == pb.properties
+
+
+def test_load_mmap_partial_sample_filtering(tensor_path):
+    """Selecting samples filters rows in each block."""
+    full = mts.load_mmap(tensor_path)
+    sample_sel = Labels(
+        names=["system"],
+        values=torch.tensor([[0]], dtype=torch.int32),
+    )
+
+    partial = mts.load_mmap_partial(tensor_path, samples=sample_sel)
+
+    assert len(partial.keys) == len(full.keys)
+
+    for i in range(len(partial.keys)):
+        fb = full.block_by_id(i)
+        pb = partial.block_by_id(i)
+
+        assert len(pb.samples) <= len(fb.samples)
+        assert fb.properties == pb.properties
+
+
+def test_load_mmap_partial_property_filtering(tensor_path):
+    """Selecting properties filters columns in each block."""
+    full = mts.load_mmap(tensor_path)
+    prop_sel = Labels(
+        names=["n"],
+        values=torch.tensor([[0]], dtype=torch.int32),
+    )
+
+    partial = mts.load_mmap_partial(tensor_path, properties=prop_sel)
+
+    assert len(partial.keys) == len(full.keys)
+
+    for i in range(len(partial.keys)):
+        fb = full.block_by_id(i)
+        pb = partial.block_by_id(i)
+
+        assert fb.samples == pb.samples
+        assert len(pb.properties) <= len(fb.properties)
+
+
+def test_load_mmap_partial_gradient_reindexing(tensor_path):
+    """Gradient sample[0] is correctly reindexed after sample filtering."""
+    sample_sel = Labels(
+        names=["system"],
+        values=torch.tensor([[0]], dtype=torch.int32),
+    )
+
+    partial = mts.load_mmap_partial(tensor_path, samples=sample_sel)
+
+    for i in range(len(partial.keys)):
+        pb = partial.block_by_id(i)
+        n_samples = len(pb.samples)
+
+        for param in pb.gradients_list():
+            pg = pb.gradient(param)
+            for j in range(len(pg.samples)):
+                parent_idx = int(pg.samples.entry(j)[0])
+                assert parent_idx < n_samples
+
+
+def test_load_mmap_partial_empty_key_match(tensor_path):
+    """Selecting nonexistent keys should produce an empty TensorMap."""
+    key_sel = Labels(
+        names=["o3_lambda", "o3_sigma", "center_type", "neighbor_type"],
+        values=torch.tensor([[999, 999, 999, 999]], dtype=torch.int32),
+    )
+
+    partial = mts.load_mmap_partial(tensor_path, keys=key_sel)
+
+    assert len(partial.keys) == 0
+
+
+def test_load_mmap_partial_pathlib(tensor_path):
+    """Test load_mmap_partial with pathlib.Path."""
+    partial = mts.load_mmap_partial(Path(tensor_path))
+    assert len(partial.keys) == 27
+
+
+def test_load_mmap_partial_type_error():
+    """Test that load_mmap_partial rejects file-like objects."""
+    with pytest.raises(TypeError, match="load_mmap_partial only supports file paths"):
+        mts.load_mmap_partial(42)  # type: ignore
+
+
 class Serialization:
     def load(self, file: str) -> TensorMap:
         return mts.load(file=file)

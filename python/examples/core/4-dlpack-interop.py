@@ -320,6 +320,51 @@ with tempfile.TemporaryDirectory() as tmp:
 
 # %%
 #
+# Selective loading with ``load_mmap_partial``
+# --------------------------------------------
+#
+# When working with large datasets for batch training, you often only need a
+# subset of blocks or a slice of samples. ``metatensor.load_mmap_partial`` lets
+# you select which keys, samples, and properties to load -- the rest is never
+# paged in from disk.
+
+# Build a multi-block tensor to demonstrate filtering
+blocks = []
+for i in range(4):
+    data = np.full((3, 2), fill_value=float(i), dtype=np.float64)
+    blocks.append(
+        TensorBlock(
+            values=data,
+            samples=Labels(["sample"], np.array([[0], [1], [2]], dtype=np.int32)),
+            components=[],
+            properties=Labels(["property"], np.array([[0], [1]], dtype=np.int32)),
+        )
+    )
+
+multi_keys = Labels(["type"], np.array([[0], [1], [2], [3]], dtype=np.int32))
+multi_tensor = TensorMap(multi_keys, blocks)
+
+with tempfile.TemporaryDirectory() as tmp:
+    path = os.path.join(tmp, "multi.mts")
+    mts.save(path, multi_tensor, use_numpy=False)
+
+    # Load only blocks with type=1 or type=3
+    key_filter = Labels(["type"], np.array([[1], [3]], dtype=np.int32))
+    partial = mts.load_mmap_partial(path, keys=key_filter)
+
+    print("Full tensor blocks:", len(multi_tensor))
+    print("Partial (keys) blocks:", len(partial))
+    print("Partial keys:", partial.keys)
+
+    # Load all blocks but only sample rows 0 and 2
+    sample_filter = Labels(["sample"], np.array([[0], [2]], dtype=np.int32))
+    partial_samples = mts.load_mmap_partial(path, samples=sample_filter)
+
+    print("Full block shape:", multi_tensor.block(0).values.shape)
+    print("Filtered block shape:", partial_samples.block(0).values.shape)
+
+# %%
+#
 # Cleanup
 
 

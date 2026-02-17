@@ -25,6 +25,10 @@ a changelog](https://keepachangelog.com/en/1.1.0/) format. This project follows
   files. Also available as TorchScript ops (`torch.ops.metatensor.load_mmap`,
   `torch.ops.metatensor.load_block_mmap`).
 
+- Added `metatensor.torch.load_mmap_partial` for selectively loading data from
+  `.mts` files with key, sample, and property filters. Also available as
+  TorchScript op (`torch.ops.metatensor.load_mmap_partial`).
+
 ### Removed
 
 - Removed `TorchDataArray::data()` override. Use `as_dlpack` instead, which

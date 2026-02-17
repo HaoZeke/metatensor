@@ -533,6 +533,26 @@ TensorMap TensorMapHolder::load_mmap(const std::string& path) {
     );
 }
 
+TensorMap TensorMapHolder::load_mmap_partial(
+    const std::string& path,
+    Labels keys,
+    Labels samples,
+    Labels properties
+) {
+    const metatensor::Labels* keys_ptr =
+        (keys->count() == 0) ? nullptr : &keys->as_metatensor();
+    const metatensor::Labels* samples_ptr =
+        (samples->count() == 0) ? nullptr : &samples->as_metatensor();
+    const metatensor::Labels* properties_ptr =
+        (properties->count() == 0) ? nullptr : &properties->as_metatensor();
+
+    return torch::make_intrusive<TensorMapHolder>(
+        TensorMapHolder(metatensor::io::load_mmap_partial(
+            path, keys_ptr, samples_ptr, properties_ptr
+        ))
+    );
+}
+
 TensorMap TensorMapHolder::load_buffer(torch::Tensor buffer) {
     if (buffer.scalar_type() != torch::kUInt8) {
         C10_THROW_ERROR(ValueError,
