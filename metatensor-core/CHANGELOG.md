@@ -61,6 +61,20 @@ a changelog](https://keepachangelog.com/en/1.1.0/) format. This project follows
   `metatensor.load_partial`; PyTorch `metatensor_torch.load_partial`.
 - Fixed component carry logic in `SimpleDataArray::move_samples_from` for
   arrays with more than one component dimension (4D+ tensors).
+- `mts_labels_values_array` and `mts_labels_set_values_array` C API functions
+  for accessing and setting an `mts_array_t` on Labels. The values array is
+  lazily initialized on first access (CPU-backed, wrapping the label values) or
+  can be set once explicitly (e.g. with a GPU tensor from torch).
+- `Labels::values_array()` and `Labels::set_values_array()` methods in C++ and
+  Rust wrappers.
+- `LabelsValuesArray` internal struct providing a read-only `mts_array_t` vtable
+  for CPU-backed label values, with `device()` (returns CPU) and `as_dlpack()`
+  (i32 DLPack export) support.
+
+### Changed
+
+- Labels now use `OnceCell<mts_array_t>` internally instead of
+  `RwLock<UserData>`, restoring full immutability to the Labels struct.
 
 ### Removed
 
@@ -68,6 +82,9 @@ a changelog](https://keepachangelog.com/en/1.1.0/) format. This project follows
   implementations (`DataArrayBase::data()` in C++, `Array::data()` in Rust,
   `_mts_array_data` in Python). Use `mts_array_t.as_dlpack` instead, which
   supports all numeric types via the DLPack standard rather than only float64.
+- `mts_labels_set_user_data` and `mts_labels_user_data` C API functions.
+- `LabelsUserData` C++ class.
+- `Labels::user_data()` and `Labels::set_user_data()` methods in C++ and Rust.
 
 ### Fixed
 - Ensure `info` of `TensorMap` is also moved when `to`, `keys_to_samples`,

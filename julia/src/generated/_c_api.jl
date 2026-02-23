@@ -143,19 +143,35 @@ function mts_labels_create_assume_unique(labels::Ptr{mts_labels_t})
     )
 end
 
-function mts_labels_set_user_data(labels::mts_labels_t, user_data::Ptr{Cvoid}, user_data_delete::Ptr{Cvoid} #= (Ptr{Cvoid}) -> Cvoid =#)
-    ccall((:mts_labels_set_user_data, libmetatensor), 
+function mts_labels_values_array(labels::mts_labels_t, array::Ptr{mts_array_t})
+    ccall((:mts_labels_values_array, libmetatensor), 
         mts_status_t,
-        (mts_labels_t, Ptr{Cvoid}, Ptr{Cvoid} #= (Ptr{Cvoid}) -> Cvoid =#,),
-        labels, user_data, user_data_delete
+        (mts_labels_t, Ptr{mts_array_t},),
+        labels, array
     )
 end
 
-function mts_labels_user_data(labels::mts_labels_t, user_data::Ptr{Ptr{Cvoid}})
-    ccall((:mts_labels_user_data, libmetatensor), 
+function mts_labels_create_from_array(labels::Ptr{mts_labels_t}, array::mts_array_t)
+    ccall((:mts_labels_create_from_array, libmetatensor), 
         mts_status_t,
-        (mts_labels_t, Ptr{Ptr{Cvoid}},),
-        labels, user_data
+        (Ptr{mts_labels_t}, mts_array_t,),
+        labels, array
+    )
+end
+
+function mts_labels_create_from_array_assume_unique(labels::Ptr{mts_labels_t}, array::mts_array_t)
+    ccall((:mts_labels_create_from_array_assume_unique, libmetatensor), 
+        mts_status_t,
+        (Ptr{mts_labels_t}, mts_array_t,),
+        labels, array
+    )
+end
+
+function mts_labels_values(labels::mts_labels_t, values::Ptr{Ptr{Int32}}, count::Ptr{UIntptr})
+    ccall((:mts_labels_values, libmetatensor), 
+        mts_status_t,
+        (mts_labels_t, Ptr{Ptr{Int32}}, Ptr{UIntptr},),
+        labels, values, count
     )
 end
 

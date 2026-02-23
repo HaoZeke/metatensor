@@ -312,17 +312,22 @@ extern "C" {
     #[must_use]
     pub fn mts_labels_create_assume_unique(labels: *mut mts_labels_t) -> mts_status_t;
     #[must_use]
-    pub fn mts_labels_set_user_data(
-        labels: mts_labels_t,
-        user_data: *mut ::std::os::raw::c_void,
-        user_data_delete: ::std::option::Option<
-            unsafe extern "C" fn(arg1: *mut ::std::os::raw::c_void),
-        >,
+    pub fn mts_labels_values_array(labels: mts_labels_t, array: *mut mts_array_t) -> mts_status_t;
+    #[must_use]
+    pub fn mts_labels_create_from_array(
+        labels: *mut mts_labels_t,
+        array: mts_array_t,
     ) -> mts_status_t;
     #[must_use]
-    pub fn mts_labels_user_data(
+    pub fn mts_labels_create_from_array_assume_unique(
+        labels: *mut mts_labels_t,
+        array: mts_array_t,
+    ) -> mts_status_t;
+    #[must_use]
+    pub fn mts_labels_values(
         labels: mts_labels_t,
-        user_data: *mut *mut ::std::os::raw::c_void,
+        values: *mut *const i32,
+        count: *mut usize,
     ) -> mts_status_t;
     #[must_use]
     pub fn mts_labels_clone(labels: mts_labels_t, clone: *mut mts_labels_t) -> mts_status_t;

@@ -122,8 +122,8 @@ pub struct Labels {
 // Labels can be sent to other thread safely since mts_labels_t uses an
 // `Arc<metatensor_core::Labels>`, so freeing them from another thread is fine
 unsafe impl Send for Labels {}
-// &Labels can be sent to other thread safely since there is no un-synchronized
-// interior mutability (`user_data` is protected by RwLock).
+// &Labels can be sent to other thread safely since the interior mutability
+// (values array) uses OnceCell, which is Sync.
 unsafe impl Sync for Labels {}
 
 impl std::fmt::Debug for Labels {

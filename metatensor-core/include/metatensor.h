@@ -414,41 +414,70 @@ mts_status_t mts_labels_create(struct mts_labels_t *labels);
 mts_status_t mts_labels_create_assume_unique(struct mts_labels_t *labels);
 
 /**
- * Update the registered user data in `labels`
+ * Get the values array backing these `labels`.
  *
- * This function changes the registered user data in the Rust Labels to be
- * `user_data`; and store the corresponding `user_data_delete` function to be
- * called once the labels go out of scope.
+ * The returned `mts_array_t` is a non-owning view into the Labels and must
+ * not be freed by the caller.
  *
- * Any existing user data will be released (by calling the provided
- * `user_data_delete` function) before overwriting with the new data.
- *
- * @param labels set of labels where we want to add user data
- * @param user_data pointer to the data
- * @param user_data_delete function pointer that will be used (if not NULL)
- *                         to free the memory associated with `data` when the
- *                         `labels` are freed.
+ * @param labels set of labels with an associated Rust data structure
+ * @param array on output, will contain the values array
  * @returns The status code of this operation. If the status is not
  *          `MTS_SUCCESS`, you can use `mts_last_error()` to get the full
  *          error message.
  */
-mts_status_t mts_labels_set_user_data(struct mts_labels_t labels,
-                                      void *user_data,
-                                      void (*user_data_delete)(void*));
+mts_status_t mts_labels_values_array(struct mts_labels_t labels, struct mts_array_t *array);
 
 /**
- * Get the registered user data in `labels` in `*user_data`.
+ * Create a new set of labels from the given names and array.
  *
- * If no data has been registered, `*user_data` will be NULL.
+ * The array must be on a CPU device. This function verifies uniqueness of
+ * the labels entries.
  *
- * @param labels set of labels containing user data
- * @param user_data this will be set to the pointer than was registered with
- *                  these `labels`
+ * @param labels on input, must have `names` and `size` set. On output,
+ *        will contain pointers to Rust-managed memory.
+ * @param array the values array. The labels take ownership of this array.
  * @returns The status code of this operation. If the status is not
  *          `MTS_SUCCESS`, you can use `mts_last_error()` to get the full
  *          error message.
  */
-mts_status_t mts_labels_user_data(struct mts_labels_t labels, void **user_data);
+mts_status_t mts_labels_create_from_array(struct mts_labels_t *labels, struct mts_array_t array);
+
+/**
+ * Create a new set of labels from the given names and array, without
+ * checking uniqueness.
+ *
+ * The array can be on any device (CPU or GPU). The caller must ensure
+ * that the labels entries are unique; passing non-unique entries is
+ * invalid and can lead to crashes or infinite loops.
+ *
+ * @param labels on input, must have `names` and `size` set. On output,
+ *        will contain pointers to Rust-managed memory.
+ * @param array the values array. The labels take ownership of this array.
+ * @returns The status code of this operation. If the status is not
+ *          `MTS_SUCCESS`, you can use `mts_last_error()` to get the full
+ *          error message.
+ */
+mts_status_t mts_labels_create_from_array_assume_unique(struct mts_labels_t *labels,
+                                                        struct mts_array_t array);
+
+/**
+ * Get the values of these labels, materializing from the backing array if
+ * needed.
+ *
+ * This is the recommended way to access the values of labels that may have
+ * been created from an array (where `mts_labels_t.values` may be NULL).
+ *
+ * @param labels set of labels with an associated Rust data structure
+ * @param values on output, will point to the first element of the values
+ *        array
+ * @param count on output, will contain the number of entries
+ * @returns The status code of this operation. If the status is not
+ *          `MTS_SUCCESS`, you can use `mts_last_error()` to get the full
+ *          error message.
+ */
+mts_status_t mts_labels_values(struct mts_labels_t labels,
+                               const int32_t **values,
+                               uintptr_t *count);
 
 /**
  * Make a copy of `labels` inside `clone`.

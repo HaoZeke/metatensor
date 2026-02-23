@@ -3,6 +3,7 @@ use std::ffi::CStr;
 use std::sync::Arc;
 
 use crate::{LabelValue, Labels, Error};
+use crate::data::mts_array_t;
 use super::status::{mts_status_t, catch_unwind};
 
 /// A set of labels used to carry metadata associated with a tensor map.
@@ -52,10 +53,11 @@ pub unsafe fn rust_to_mts_labels(labels: Arc<Labels>) -> mts_labels_t {
     let size = labels.size();
     let count = labels.count();
 
-    let values = if labels.count() == 0 || labels.size() == 0 {
-        std::ptr::null()
-    } else {
+    // Only set values pointer if values are already materialized
+    let values = if labels.values_materialized() && count > 0 && size > 0 {
         (&labels[0][0] as *const LabelValue).cast()
+    } else {
+        std::ptr::null()
     };
 
     let names = if labels.size() == 0 {
@@ -285,71 +287,179 @@ pub unsafe extern "C" fn mts_labels_create_assume_unique(
     })
 }
 
-/// Update the registered user data in `labels`
+/// Get the values array backing these `labels`.
 ///
-/// This function changes the registered user data in the Rust Labels to be
-/// `user_data`; and store the corresponding `user_data_delete` function to be
-/// called once the labels go out of scope.
+/// The returned `mts_array_t` is a non-owning view into the Labels and must
+/// not be freed by the caller.
 ///
-/// Any existing user data will be released (by calling the provided
-/// `user_data_delete` function) before overwriting with the new data.
-///
-/// @param labels set of labels where we want to add user data
-/// @param user_data pointer to the data
-/// @param user_data_delete function pointer that will be used (if not NULL)
-///                         to free the memory associated with `data` when the
-///                         `labels` are freed.
+/// @param labels set of labels with an associated Rust data structure
+/// @param array on output, will contain the values array
 /// @returns The status code of this operation. If the status is not
 ///          `MTS_SUCCESS`, you can use `mts_last_error()` to get the full
 ///          error message.
 #[no_mangle]
-pub unsafe extern "C" fn mts_labels_set_user_data(
+pub unsafe extern "C" fn mts_labels_values_array(
     labels: mts_labels_t,
-    user_data: *mut c_void,
-    user_data_delete: Option<unsafe extern "C" fn(*mut c_void)>
+    array: *mut mts_array_t,
 ) -> mts_status_t {
     catch_unwind(|| {
+        check_pointers_non_null!(array);
+
         if !labels.is_rust() {
             return Err(Error::InvalidParameter(
-                "these labels do not support calling mts_labels_set_user_data, \
+                "these labels do not support calling mts_labels_values_array, \
                 call mts_labels_create first".into()
             ));
         }
 
         let rust_labels = &*labels.internal_ptr_.cast::<Labels>();
-        rust_labels.set_user_data(user_data, user_data_delete);
+        let values_array = rust_labels.values_array();
+        *array = values_array.raw_copy();
 
         Ok(())
     })
 }
 
-/// Get the registered user data in `labels` in `*user_data`.
+/// Create a new set of labels from the given names and array.
 ///
-/// If no data has been registered, `*user_data` will be NULL.
+/// The array must be on a CPU device. This function verifies uniqueness of
+/// the labels entries.
 ///
-/// @param labels set of labels containing user data
-/// @param user_data this will be set to the pointer than was registered with
-///                  these `labels`
+/// @param labels on input, must have `names` and `size` set. On output,
+///        will contain pointers to Rust-managed memory.
+/// @param array the values array. The labels take ownership of this array.
 /// @returns The status code of this operation. If the status is not
 ///          `MTS_SUCCESS`, you can use `mts_last_error()` to get the full
 ///          error message.
 #[no_mangle]
-pub unsafe extern "C" fn mts_labels_user_data(
-    labels: mts_labels_t,
-    user_data: *mut *mut c_void,
+pub unsafe extern "C" fn mts_labels_create_from_array(
+    labels: *mut mts_labels_t,
+    array: mts_array_t,
 ) -> mts_status_t {
     catch_unwind(|| {
-        check_pointers_non_null!(user_data);
+        check_pointers_non_null!(labels);
+
+        if (*labels).is_rust() {
+            return Err(Error::InvalidParameter(
+                "these labels already correspond to rust labels".into()
+            ));
+        }
+
+        // read names from the mts_labels_t
+        let raw = &*labels;
+        if raw.size == 0 {
+            let rust_labels = Labels::from_array(&[], array)?;
+            *labels = rust_to_mts_labels(Arc::new(rust_labels));
+            return Ok(());
+        }
+
+        if raw.names.is_null() {
+            return Err(Error::InvalidParameter("labels.names can not be NULL in mts_labels_t".into()));
+        }
+
+        let mut names = Vec::with_capacity(raw.size);
+        for i in 0..raw.size {
+            let name = std::ffi::CStr::from_ptr(*(raw.names.add(i)));
+            names.push(name.to_str().expect("invalid UTF-8 in label name"));
+        }
+
+        let rust_labels = Labels::from_array(&names, array)?;
+        *labels = rust_to_mts_labels(Arc::new(rust_labels));
+
+        Ok(())
+    })
+}
+
+/// Create a new set of labels from the given names and array, without
+/// checking uniqueness.
+///
+/// The array can be on any device (CPU or GPU). The caller must ensure
+/// that the labels entries are unique; passing non-unique entries is
+/// invalid and can lead to crashes or infinite loops.
+///
+/// @param labels on input, must have `names` and `size` set. On output,
+///        will contain pointers to Rust-managed memory.
+/// @param array the values array. The labels take ownership of this array.
+/// @returns The status code of this operation. If the status is not
+///          `MTS_SUCCESS`, you can use `mts_last_error()` to get the full
+///          error message.
+#[no_mangle]
+pub unsafe extern "C" fn mts_labels_create_from_array_assume_unique(
+    labels: *mut mts_labels_t,
+    array: mts_array_t,
+) -> mts_status_t {
+    catch_unwind(|| {
+        check_pointers_non_null!(labels);
+
+        if (*labels).is_rust() {
+            return Err(Error::InvalidParameter(
+                "these labels already correspond to rust labels".into()
+            ));
+        }
+
+        // read names from the mts_labels_t
+        let raw = &*labels;
+        if raw.size == 0 {
+            let rust_labels = Labels::from_array_assume_unique(&[], array)?;
+            *labels = rust_to_mts_labels(Arc::new(rust_labels));
+            return Ok(());
+        }
+
+        if raw.names.is_null() {
+            return Err(Error::InvalidParameter("labels.names can not be NULL in mts_labels_t".into()));
+        }
+
+        let mut names = Vec::with_capacity(raw.size);
+        for i in 0..raw.size {
+            let name = std::ffi::CStr::from_ptr(*(raw.names.add(i)));
+            names.push(name.to_str().expect("invalid UTF-8 in label name"));
+        }
+
+        let rust_labels = Labels::from_array_assume_unique(&names, array)?;
+        *labels = rust_to_mts_labels(Arc::new(rust_labels));
+
+        Ok(())
+    })
+}
+
+/// Get the values of these labels, materializing from the backing array if
+/// needed.
+///
+/// This is the recommended way to access the values of labels that may have
+/// been created from an array (where `mts_labels_t.values` may be NULL).
+///
+/// @param labels set of labels with an associated Rust data structure
+/// @param values on output, will point to the first element of the values
+///        array
+/// @param count on output, will contain the number of entries
+/// @returns The status code of this operation. If the status is not
+///          `MTS_SUCCESS`, you can use `mts_last_error()` to get the full
+///          error message.
+#[no_mangle]
+pub unsafe extern "C" fn mts_labels_values(
+    labels: mts_labels_t,
+    values: *mut *const i32,
+    count: *mut usize,
+) -> mts_status_t {
+    catch_unwind(|| {
+        check_pointers_non_null!(values, count);
 
         if !labels.is_rust() {
             return Err(Error::InvalidParameter(
-                "these labels do not support calling mts_labels_get_user_data, \
+                "these labels do not support calling mts_labels_values, \
                 call mts_labels_create first".into()
             ));
         }
 
         let rust_labels = &*labels.internal_ptr_.cast::<Labels>();
-        *user_data = rust_labels.user_data();
+        let v = rust_labels.get_values();
+
+        if v.is_empty() {
+            *values = std::ptr::null();
+        } else {
+            *values = v.as_ptr().cast();
+        }
+        *count = rust_labels.count();
 
         Ok(())
     })

@@ -25,6 +25,14 @@ a changelog](https://keepachangelog.com/en/1.1.0/) format. This project follows
   files. Also available as TorchScript ops (`torch.ops.metatensor.load_mmap`,
   `torch.ops.metatensor.load_block_mmap`).
 
+### Changed
+
+- Replaced `LabelsUserData` / `set_user_data` with `set_values_array` for
+  storing torch tensors inside metatensor Labels. The torch tensor backing
+  label values is now stored via the `mts_array_t` values array API instead
+  of the removed `user_data` void pointer. The `TorchLabelsArrayData` vtable
+  implements `device()` and `as_dlpack()` for device-aware label access.
+
 ### Removed
 
 - Removed `TorchDataArray::data()` override. Use `as_dlpack` instead, which

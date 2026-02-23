@@ -164,18 +164,30 @@ def setup_functions(lib):
     ]
     lib.mts_labels_create_assume_unique.restype = _check_status
 
-    lib.mts_labels_set_user_data.argtypes = [
+    lib.mts_labels_values_array.argtypes = [
         mts_labels_t,
-        ctypes.c_void_p,
-        CFUNCTYPE(None, ctypes.c_void_p),
+        POINTER(mts_array_t),
     ]
-    lib.mts_labels_set_user_data.restype = _check_status
+    lib.mts_labels_values_array.restype = _check_status
 
-    lib.mts_labels_user_data.argtypes = [
-        mts_labels_t,
-        POINTER(POINTER(None)),
+    lib.mts_labels_create_from_array.argtypes = [
+        POINTER(mts_labels_t),
+        mts_array_t,
     ]
-    lib.mts_labels_user_data.restype = _check_status
+    lib.mts_labels_create_from_array.restype = _check_status
+
+    lib.mts_labels_create_from_array_assume_unique.argtypes = [
+        POINTER(mts_labels_t),
+        mts_array_t,
+    ]
+    lib.mts_labels_create_from_array_assume_unique.restype = _check_status
+
+    lib.mts_labels_values.argtypes = [
+        mts_labels_t,
+        POINTER(POINTER(ctypes.c_int32)),
+        POINTER(c_uintptr_t),
+    ]
+    lib.mts_labels_values.restype = _check_status
 
     lib.mts_labels_clone.argtypes = [
         mts_labels_t,
