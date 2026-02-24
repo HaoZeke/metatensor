@@ -367,6 +367,12 @@ extern "C" {
         selected_count: *mut usize,
     ) -> mts_status_t;
     #[must_use]
+    pub fn mts_labels_set_cached_values(
+        labels: mts_labels_t,
+        values: *const i32,
+        count: usize,
+    ) -> mts_status_t;
+    #[must_use]
     pub fn mts_labels_free(labels: *mut mts_labels_t) -> mts_status_t;
     #[must_use]
     pub fn mts_register_data_origin(

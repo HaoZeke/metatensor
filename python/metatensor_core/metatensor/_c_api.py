@@ -234,6 +234,13 @@ def setup_functions(lib):
     ]
     lib.mts_labels_select.restype = _check_status
 
+    lib.mts_labels_set_cached_values.argtypes = [
+        mts_labels_t,
+        POINTER(ctypes.c_int32),
+        c_uintptr_t,
+    ]
+    lib.mts_labels_set_cached_values.restype = _check_status
+
     lib.mts_labels_free.argtypes = [
         POINTER(mts_labels_t),
     ]

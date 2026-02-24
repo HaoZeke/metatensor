@@ -374,7 +374,7 @@ impl Labels {
         for name in names {
             if !is_valid_label_name(name) {
                 return Err(Error::InvalidParameter(format!(
-                    "all labels names must be valid identifiers, '{}' is not", name
+                    "'{}' is not a valid label name", name
                 )));
             }
         }
@@ -454,6 +454,15 @@ impl Labels {
     /// Check if the CPU values have already been materialized
     pub(crate) fn values_materialized(&self) -> bool {
         self.values.get().is_some()
+    }
+
+    /// Pre-fill the cached CPU values without triggering materialization
+    /// from the array. Used when the caller has values from a known-good
+    /// source (e.g., device transfer where the source Labels was validated).
+    ///
+    /// If the values are already cached, this is a no-op.
+    pub fn set_cached_values(&self, values: Vec<LabelValue>) {
+        let _ = self.values.set(values);
     }
 
     /// Get the number of entries/named values in a single label
@@ -849,7 +858,7 @@ mod tests {
     #[test]
     fn valid_names() {
         let e = Labels::new(&["not an ident"], Vec::<LabelValue>::new()).err().unwrap();
-        assert_eq!(e.to_string(), "invalid parameter: all labels names must be valid identifiers, 'not an ident' is not");
+        assert_eq!(e.to_string(), "invalid parameter: 'not an ident' is not a valid label name");
 
         let e = Labels::new(&["not", "there", "not"], Vec::<LabelValue>::new()).err().unwrap();
         assert_eq!(e.to_string(), "invalid parameter: labels names must be unique, got 'not' multiple times");

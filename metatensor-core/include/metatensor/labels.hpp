@@ -215,6 +215,16 @@ public:
         return labels_;
     }
 
+    /// Pre-fill the cached CPU values without triggering materialization
+    /// from the backing array. Used when the caller has values from a
+    /// known-good source (e.g., device transfer where the source Labels
+    /// was validated). If the values are already cached, this is a no-op.
+    void set_cached_values(const int32_t* values, size_t count) const {
+        details::check_status(
+            mts_labels_set_cached_values(labels_, values, count)
+        );
+    }
+
     /// Get the values array backing these Labels.
     ///
     /// The returned `mts_array_t` is a non-owning copy (raw_copy); the caller

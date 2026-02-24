@@ -556,14 +556,25 @@ Labels LabelsHolder::to(torch::Device device, bool non_blocking) const {
         // return the same object
         return torch::make_intrusive<LabelsHolder>(*this);
     } else if (device.is_meta()) {
-        // Meta tensors have no storage and cannot produce CPU values via
-        // DLPack. Keep the original Rust Labels (which has CPU values from
-        // the source) and only move the torch tensor to Meta.
         auto new_values = values_.to(device, non_blocking);
+        // Create Rust Labels with Meta-backed array (preserves device in round-trips)
+        auto meta_array = torch_tensor_to_labels_mts_array(new_values);
+        auto new_labels = metatensor::Labels(
+            this->names(), std::move(meta_array), metatensor::assume_unique{}
+        );
+        // Pre-fill CPU values from the original Labels so Rust never needs to
+        // materialize from the Meta array (which has no storage)
+        auto orig = this->as_metatensor();
+        auto raw = orig.as_mts_labels_t();
+        const int32_t* orig_values_ptr = nullptr;
+        size_t orig_count = 0;
+        metatensor::details::check_status(
+            mts_labels_values(raw, &orig_values_ptr, &orig_count)
+        );
+        new_labels.set_cached_values(orig_values_ptr, orig_count);
+
         return torch::make_intrusive<LabelsHolder>(
-            this->names(),
-            std::move(new_values),
-            metatensor::Labels(this->as_metatensor())
+            this->names(), std::move(new_values), std::move(new_labels)
         );
     } else {
         auto new_values = values_.to(device, non_blocking);

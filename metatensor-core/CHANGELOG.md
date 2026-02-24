@@ -61,20 +61,32 @@ a changelog](https://keepachangelog.com/en/1.1.0/) format. This project follows
   `metatensor.load_partial`; PyTorch `metatensor_torch.load_partial`.
 - Fixed component carry logic in `SimpleDataArray::move_samples_from` for
   arrays with more than one component dimension (4D+ tensors).
-- `mts_labels_values_array` and `mts_labels_set_values_array` C API functions
-  for accessing and setting an `mts_array_t` on Labels. The values array is
-  lazily initialized on first access (CPU-backed, wrapping the label values) or
-  can be set once explicitly (e.g. with a GPU tensor from torch).
-- `Labels::values_array()` and `Labels::set_values_array()` methods in C++ and
-  Rust wrappers.
+- Labels now use `mts_array_t` as the primary (always-present) data and lazily
+  materialize CPU `Vec<LabelValue>` on demand via DLPack. New constructors:
+  `Labels::from_array(names, array)` (CPU, checked uniqueness) and
+  `Labels::from_array_assume_unique(names, array)` (any device, unchecked).
+- `mts_labels_create_from_array`, `mts_labels_create_from_array_assume_unique`,
+  and `mts_labels_values` (on-demand materialization) C API functions.
+- `mts_labels_values_array` C API function for accessing the backing
+  `mts_array_t`.
+- `mts_labels_set_cached_values` C API function for pre-filling the cached CPU
+  values without triggering materialization from the backing array. Used for
+  device transfers where the backing array is on a device that cannot produce
+  values via DLPack (e.g. Meta tensors).
+- `Labels::set_cached_values()` in C++ and Rust wrappers.
 - `LabelsValuesArray` internal struct providing a read-only `mts_array_t` vtable
   for CPU-backed label values, with `device()` (returns CPU) and `as_dlpack()`
   (i32 DLPack export) support.
 
 ### Changed
 
-- Labels now use `OnceCell<mts_array_t>` internally instead of
-  `RwLock<UserData>`, restoring full immutability to the Labels struct.
+- Labels now use `mts_array_t` as always-present primary data with
+  `OnceCell<Vec<LabelValue>>` for lazy CPU materialization, instead of
+  `RwLock<UserData>`. Labels are fully immutable after construction.
+- `validate_names()` error message changed from
+  `"all labels names must be valid identifiers, '{}' is not"` to
+  `"'{}' is not a valid label name"`, matching the `mts_labels_create` C API
+  format.
 
 ### Removed
 

@@ -624,6 +624,26 @@ mts_status_t mts_labels_select(struct mts_labels_t labels,
                                uintptr_t *selected_count);
 
 /**
+ * Pre-fill the cached CPU values for these `labels` without triggering
+ * materialization from the backing array. This is used when the caller
+ * has known-good CPU values (e.g., from a device transfer) and the
+ * backing array is on a device that cannot produce values via DLPack
+ * (such as Meta tensors).
+ *
+ * If the values are already cached, this is a no-op.
+ *
+ * @param labels set of labels with an associated Rust data structure
+ * @param values pointer to a flat array of int32 values (count * size elements)
+ * @param count number of entries (rows) in the values array
+ * @returns The status code of this operation. If the status is not
+ *          `MTS_SUCCESS`, you can use `mts_last_error()` to get the full
+ *          error message.
+ */
+mts_status_t mts_labels_set_cached_values(struct mts_labels_t labels,
+                                          const int32_t *values,
+                                          uintptr_t count);
+
+/**
  * Decrease the reference count of `labels`, and release the corresponding
  * memory once the reference count reaches 0.
  *

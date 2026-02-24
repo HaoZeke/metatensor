@@ -24,6 +24,7 @@ can guarantee that the data used for labels is already unique.
 - :c:func:`mts_labels_create_assume_unique`: create the Rust-side data for labels without verifying uniqueness
 - :c:func:`mts_labels_create_from_array`: create labels from an ``mts_array_t`` (CPU only, checks uniqueness)
 - :c:func:`mts_labels_create_from_array_assume_unique`: create labels from an ``mts_array_t`` on any device without checking uniqueness
+- :c:func:`mts_labels_set_cached_values`: pre-fill cached CPU values without materializing from the backing array
 
 --------------------------------------------------------------------------------
 
@@ -52,3 +53,5 @@ can guarantee that the data used for labels is already unique.
 .. doxygenfunction:: mts_labels_difference
 
 .. doxygenfunction:: mts_labels_select
+
+.. doxygenfunction:: mts_labels_set_cached_values

@@ -215,6 +215,14 @@ function mts_labels_select(labels::mts_labels_t, selection::mts_labels_t, select
     )
 end
 
+function mts_labels_set_cached_values(labels::mts_labels_t, values::Ptr{Int32}, count::UIntptr)
+    ccall((:mts_labels_set_cached_values, libmetatensor), 
+        mts_status_t,
+        (mts_labels_t, Ptr{Int32}, UIntptr,),
+        labels, values, count
+    )
+end
+
 function mts_labels_free(labels::Ptr{mts_labels_t})
     ccall((:mts_labels_free, libmetatensor), 
         mts_status_t,
