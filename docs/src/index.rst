@@ -93,8 +93,19 @@ store gradients, keeping them together with the associated values.
         +++
         |Python-32x32| |Cxx-32x32|
 
+    .. grid-item-card:: JAX backend
+        :link: metatensor-jax
+        :link-type: ref
+        :columns: 12 12 4 4
+        :margin: 0 3 0 0
 
-    .. grid-item-card:: 🧑‍💻 Learning utilities
+        Use metatensor with JAX for JIT compilation, automatic
+        differentiation, and vectorized computation via XLA.
+
+        +++
+        |Python-32x32|
+
+    .. grid-item-card:: Learning utilities
         :link: metatensor-learn
         :link-type: ref
         :columns: 12 12 4 4
@@ -117,6 +128,7 @@ store gradients, keeping them together with the associated values.
    core/index
    operations/index
    torch/index
+   jax/index
    learn/index
    atomistic/index
    cite

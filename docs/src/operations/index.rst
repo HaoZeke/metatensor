@@ -11,13 +11,15 @@ be used to build your own machine learning models. These operations are provided
 in the ``metatensor-operations`` python package, which is installed by default
 when doing ``pip install metatensor``.
 
-The operations are implemented in Python, and handle the extra metadata
-(including sparsity and gradients) of metatensor. Actual manipulations of the
-data itself will call the corresponding functions from `numpy`_ or `PyTorch`_,
-depending on how the arrays are stored in the various :py:class:`TensorBlock`.
+The operations are implemented in Python using the `Python Array API Standard
+<https://data-apis.org/array-api/latest/>`_ via ``array-api-compat``. Each
+operation is defined once and dispatches to the correct backend (numpy, PyTorch,
+or JAX) based on the array type stored in each :py:class:`TensorBlock`. This
+means the same operations work identically regardless of how the data is stored.
 
 .. _numpy: https://numpy.org/
 .. _PyTorch: https://pytorch.org/
+.. _JAX: https://jax.readthedocs.io/
 
 The list of all operations currently implemented is available in the API
 reference below. If you need any other operation, please `open an issue
@@ -25,19 +27,28 @@ reference below. If you need any other operation, please `open an issue
 
 .. grid::
 
-    .. grid-item-card:: 🔥 Using the operations with PyTorch
+    .. grid-item-card:: Using the operations with PyTorch
         :link: operations-and-torch
         :link-type: ref
-        :columns: 12 12 6 6
+        :columns: 12 12 4 4
         :margin: 0 3 0 0
 
         Learn how the operations interact with PyTorch, and in particular with
         PyTorch's automatic differentiation framework when handling gradients.
 
+    .. grid-item-card:: Using the operations with JAX
+        :link: metatensor-jax
+        :link-type: ref
+        :columns: 12 12 4 4
+        :margin: 0 3 0 0
+
+        Learn how the operations work with JAX for JIT compilation and
+        automatic differentiation through metatensor data structures.
+
     .. grid-item-card:: |Python-16x16| Operations API reference
         :link: python-api-operations
         :link-type: ref
-        :columns: 12 12 6 6
+        :columns: 12 12 4 4
         :margin: 0 3 0 0
 
         Read the documentation for all the functions in the

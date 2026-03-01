@@ -20,10 +20,12 @@ sphinx_gallery_conf = {
     "examples_dirs": [
         os.path.join(ROOT, "python", "examples", "core"),
         os.path.join(ROOT, "python", "examples", "learn"),
+        os.path.join(ROOT, "python", "examples", "jax"),
     ],
     "gallery_dirs": [
         os.path.join(ROOT, "docs", "src", "examples", "core"),
         os.path.join(ROOT, "docs", "src", "examples", "learn"),
+        os.path.join(ROOT, "docs", "src", "examples", "jax"),
     ],
     "matplotlib_animations": False,
     "image_scrapers": ("matplotlib", ChemiscopeScraper()),

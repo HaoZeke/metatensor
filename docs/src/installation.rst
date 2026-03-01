@@ -49,6 +49,16 @@ and use it will depend on the programming language you are using.
 
             pip install metatensor[torch]
 
+        **JAX integration**: To use metatensor with JAX (``jax.jit``,
+        ``jax.grad``, ``jax.vmap``), install the JAX backend:
+
+        .. code-block:: bash
+
+            pip install metatensor-jax
+
+        This requires ``jax`` and ``jaxlib`` to be installed. See the
+        :ref:`JAX backend documentation <metatensor-jax>` for usage details.
+
         **Conda**
 
         All the packages are also available on the `conda-forge
@@ -381,12 +391,14 @@ Rust using `rustup`_ or the package manager of your operating system.
             pip install ./python/metatensor_operations
             pip install ./python/metatensor_learn
             pip install ./python/metatensor_torch
+            pip install ./python/metatensor_jax
 
             # alternatively, the same thing in a single command
             pip install git+https://github.com/metatensor/metatensor#subdirectory=python/metatensor_core
             pip install git+https://github.com/metatensor/metatensor#subdirectory=python/metatensor_operations
             pip install git+https://github.com/metatensor/metatensor#subdirectory=python/metatensor_learn
             pip install git+https://github.com/metatensor/metatensor#subdirectory=python/metatensor_torch
+            pip install git+https://github.com/metatensor/metatensor#subdirectory=python/metatensor_jax
 
 
     .. tab-item:: C and C++

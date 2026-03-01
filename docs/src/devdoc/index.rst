@@ -15,6 +15,7 @@ This developer documentation contains the following sections:
 4. :ref:`devdoc-local-ci` explains how to run the GitHub Actions pipeline on
    your local machine for faster debugging.
 5. :ref:`devdoc-faq` covers some common questsions and workflows.
+6. :ref:`devdoc-benchmarks` covers running and interpreting the Python benchmarks.
 
 .. toctree::
    :maxdepth: 2
@@ -24,6 +25,7 @@ This developer documentation contains the following sections:
    versions
    local-ci
    faq
+   benchmarks
 
 Development team
 ----------------
