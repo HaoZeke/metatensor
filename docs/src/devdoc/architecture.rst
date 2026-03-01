@@ -21,6 +21,8 @@ The code is organized in multiple projects, each in a separate directory:
   learning models, with API inspired by scikit-learn and PyTorch;
 - ``python/metatensor_torch/`` contains the Python interface for the TorchScript
   version of metatensor, and the corresponding tests;
+- ``python/metatensor_jax/`` contains the JAX backend, registering metatensor
+  types as JAX PyTrees for ``jax.jit``, ``jax.grad``, and ``jax.vmap``;
 - ``python/metatensor/`` contains a small Python package re-exporting everything
   from ``metatensor-core`` and ``metatensor-operations``. This is the main
   package users should interact with.
@@ -96,9 +98,10 @@ when installed will correspond to different sub-module of ``metatensor``:
 - the ``metatensor-learn`` distribution contains the ``metatensor.learn``
   module; which depends on ``metatensor-operations``;
 - the ``metatensor-torch`` distribution contains the ``metatensor.torch``
-  module. This module re-exports ``metatensor-operations`` and
-  ``metatensor-learn`` as ``metatensor.torch.operations`` and
-  ``metatensor.torch.learn`` respectively;
+  module. This module re-exports the core types and provides the TorchScript
+  bridge;
+- the ``metatensor-jax`` distribution contains the ``metatensor_jax`` module,
+  which registers metatensor types as JAX PyTrees on import;
 
 All the Python sub-projects are built by setuptools, and fully compatible with
 ``pip`` and other standard Python tools.
@@ -119,15 +122,19 @@ This Python package contains the code for the :ref:`operations
 <metatensor-operations>` acting on :py:class:`TensorMap`, and provides building
 blocks for machine learning models on top of the metatensor data structures.
 
-By default, the operations uses the types from ``metatensor-core``, and can act
-on either numpy or torch data. The code in ``_dispatch.py`` is here to use the
-right function depending on the type of arrays stored by metatensor.
+Operations are written once using the `Python Array API Standard
+<https://data-apis.org/array-api/latest/>`_ via vendored ``array-api-compat``.
+The call ``xp = array_namespace(array)`` returns the correct namespace (numpy,
+torch, or jax.numpy) at runtime. Framework compilation (``torch.compile`` via
+Dynamo, ``jax.jit`` via XLA/StableHLO) traces through these ``xp.*`` calls
+natively.
 
-At the same time, this code is also used from ``metatensor-torch``, using the
-metatensor types exposed in this module and operating only on torch data. This
-is achieved by re-importing the code from ``metatensor-operations`` in a new
-module ``metatensor.torch.operations``. See the comments in
-``python/metatensor_torch/metatensor/torch/operations.py`` for more information.
+A thin adapter layer in ``_dispatch.py`` handles the remaining functions that
+are inherently backend-specific: ``rows_add``/``columns_add`` (scatter
+operations), ``detach``, ``requires_grad``, and TorchScript-only code paths.
+
+``metatensor.torch.operations`` re-exports from ``metatensor-operations``
+directly.
 
 ``metatensor-learn``
 --------------------
@@ -143,13 +150,23 @@ types and functions from there instead.
 ``metatensor-torch``
 --------------------
 
-This Python package exposes to Python the types defined in the C++
-``metatensor-torch`` sub-project. It should be used to define models that are
-then exported using TorchScript and run without a Python interpreter.
+This Python package provides the TorchScript bridge for metatensor. It
+re-exports the core types (``Labels``, ``TensorBlock``, ``TensorMap``) from
+``metatensor-core`` and provides ``to_torch_script()`` / ``from_torch_script()``
+for converting to/from TorchScript ``ScriptObject`` types at model export
+boundaries.
 
-As mentioned above, this package also re-exports the code from
-``metatensor-operations`` and ``metatensor-learn`` in a way compatible with
-TorchScript.
+The TorchScript C++ extension in ``metatensor-torch/`` teaches the TorchScript
+compiler about metatensor types, enabling models to be saved and loaded
+without a Python interpreter.
+
+``metatensor-jax``
+------------------
+
+This Python package registers ``TensorMap`` and ``TensorBlock`` as JAX PyTree
+nodes, enabling ``jax.jit``, ``jax.grad``, and ``jax.vmap`` to trace through
+metatensor operations. Block values are dynamic leaves (traced by JAX); Labels
+and structural metadata are static auxiliary data (not traced).
 
 ``metatensor``
 --------------
