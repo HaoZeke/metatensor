@@ -186,11 +186,10 @@ def _join_block_samples(
         _check_blocks_raise(first_block, block, fname, ["components", "properties"])
         _check_same_gradients_raise(first_block, block, fname, ["components"])
 
-    shape = list(first_block.values.shape)
-    shape[0] = n_joined_samples
+    # Concatenate block values along the samples axis (functional, JAX-safe)
+    new_values = _dispatch.concatenate([block.values for block in blocks], axis=0)
 
-    new_values = _dispatch.empty_like(first_block.values, shape=shape)
-
+    # Build samples Labels values (always concrete metadata, in-place is safe)
     first_sample_size = first_block.samples.values.shape[1]
     if add_dimension is None:
         samples_size = first_sample_size
@@ -205,7 +204,6 @@ def _join_block_samples(
     start = 0
     for block_i, block in enumerate(blocks):
         stop = start + len(block.samples)
-        new_values[start:stop] = block.values[:]
 
         new_samples[start:stop, :first_sample_size] = block.samples.values[:, :]
         if add_dimension is not None:
@@ -243,11 +241,12 @@ def _join_block_samples(
             n_gradient_samples += len(gradient.samples)
             gradients.append(gradient)
 
-        shape = list(first_gradient.values.shape)
-        shape[0] = n_gradient_samples
+        # Concatenate gradient values (functional, JAX-safe)
+        new_values = _dispatch.concatenate(
+            [g.values for g in gradients], axis=0
+        )
 
-        new_values = _dispatch.empty_like(first_gradient.values, shape=shape)
-
+        # Build gradient samples (always concrete metadata, in-place is safe)
         new_samples = _dispatch.empty_like(
             first_gradient.samples.values,
             shape=[n_gradient_samples, first_gradient.samples.values.shape[1]],
@@ -257,7 +256,6 @@ def _join_block_samples(
         sample_shift = 0
         for block, gradient in zip(blocks, gradients, strict=True):
             stop = start + len(gradient.samples)
-            new_values[start:stop] = gradient.values[:]
 
             new_samples[start:stop] = gradient.samples.values[:]
             # update the "sample" dimension, matching the shift in the values
@@ -313,10 +311,8 @@ def _join_block_properties(
         if block.properties.names != property_names:
             has_different_property_names = True
 
-    shape = list(first_block.values.shape)
-    shape[-1] = n_joined_properties
-
-    new_values = _dispatch.empty_like(first_block.values, shape=shape)
+    # Concatenate block values along properties axis (functional, JAX-safe)
+    new_values = _dispatch.concatenate([block.values for block in blocks], axis=-1)
 
     first_properties_size = first_block.properties.values.shape[1]
     if add_dimension is None:
@@ -339,10 +335,10 @@ def _join_block_properties(
             first_block.samples.values, shape=[n_joined_properties, properties_size]
         )
 
+    # Build properties Labels values (always concrete metadata, in-place is safe)
     start = 0
     for block_i, block in enumerate(blocks):
         stop = start + len(block.properties)
-        new_values[..., start:stop] = block.values[..., :]
 
         if has_different_property_names:
             new_properties_values[start:stop, 0] = block_i
@@ -409,13 +405,28 @@ def _join_block_properties(
         new_values = _dispatch.zeros_like(first_gradient.values, shape=shape)
 
         start = 0
+        n_total_props = shape[-1]
         for gradient in gradients:
             stop = start + len(gradient.properties)
             # find where we should put the current gradients in the joined samples
             # we can not get the mapping in the first loop over gradients above since
             # `joined_gradient_samples` could still change
             _, _, mapping = joined_gradient_samples.union_and_mapping(gradient.samples)
-            new_values[mapping, ..., start:stop] = gradient.values
+
+            # Pad gradient values to the full property dimension, then scatter-add
+            # by sample index. This is functional (JAX-safe): no in-place assignment
+            # on traced arrays.
+            pad_pre = _dispatch.zeros_like(
+                gradient.values,
+                shape=list(gradient.values.shape[:-1]) + [start],
+            )
+            pad_post = _dispatch.zeros_like(
+                gradient.values,
+                shape=list(gradient.values.shape[:-1]) + [n_total_props - stop],
+            )
+            padded = _dispatch.concatenate([pad_pre, gradient.values, pad_post], axis=-1)
+            new_values = _dispatch.rows_add(new_values, padded, mapping)
+
             start = stop
 
         new_gradient = TensorBlock(
