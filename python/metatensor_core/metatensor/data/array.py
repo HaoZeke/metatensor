@@ -30,6 +30,14 @@ try:
 except ImportError:
     HAS_TORCH = False
 
+try:
+    import jax
+    import jax.numpy as jnp
+
+    HAS_JAX = True
+except ImportError:
+    HAS_JAX = False
+
 
 def _register_origin(name):
     from .._c_lib import _get_library
@@ -51,8 +59,16 @@ def _is_torch_array(array):
     return isinstance(array, torch.Tensor)
 
 
+def _is_jax_array(array):
+    if not HAS_JAX:
+        return False
+
+    return isinstance(array, jax.Array)
+
+
 _NUMPY_STORAGE_ORIGIN = None
 _TORCH_STORAGE_ORIGIN = None
+_JAX_STORAGE_ORIGIN = None
 
 
 def _origin_numpy():
@@ -69,6 +85,14 @@ def _origin_pytorch():
         _TORCH_STORAGE_ORIGIN = _register_origin(__name__ + ".torch")
 
     return _TORCH_STORAGE_ORIGIN
+
+
+def _origin_jax():
+    global _JAX_STORAGE_ORIGIN
+    if _JAX_STORAGE_ORIGIN is None:
+        _JAX_STORAGE_ORIGIN = _register_origin(__name__ + ".jax")
+
+    return _JAX_STORAGE_ORIGIN
 
 
 if HAS_TORCH:
@@ -194,8 +218,11 @@ _POSSIBLE_C_SHAPE_TYPES = [ctypes.ARRAY(c_uintptr_t, N) for N in range(64)]
 
 def create_mts_array(array):
     """
-    Create a ``mts_array_t`` corresponding to the given ``array``, which should be
-    either :py:class:`torch.Tensor` or :py:class:`numpy.ndarray`.
+    Create a ``mts_array_t`` corresponding to the given ``array``.
+
+    Supported array types: :py:class:`numpy.ndarray`, :py:class:`torch.Tensor`,
+    and :py:class:`jax.Array`. Any array type supporting ``__dlpack__`` can also
+    be used, provided it has a ``shape`` attribute and a ``dtype`` attribute.
     """
     c_shape = _POSSIBLE_C_SHAPE_TYPES[len(array.shape)]()
     c_shape[:] = array.shape
@@ -210,6 +237,10 @@ def create_mts_array(array):
         mts_array_origin = _MTS_ARRAY_ORIGIN_PYTORCH
         mts_array_device = _MTS_ARRAY_DEVICE_PYTORCH
         mts_array_dtype = _MTS_ARRAY_DTYPE_PYTORCH
+    elif _is_jax_array(array):
+        mts_array_origin = _MTS_ARRAY_ORIGIN_JAX
+        mts_array_device = _MTS_ARRAY_DEVICE_JAX
+        mts_array_dtype = _MTS_ARRAY_DTYPE_JAX
     else:
         raise ValueError(f"unknown array type: {type(array)}")
 
@@ -272,6 +303,10 @@ def _mts_array_create(this, shape_ptr, shape_count, new_array):
         array = np.zeros(shape, dtype=dtype)
     elif _is_torch_array(wrapper.array):
         array = torch.zeros(shape, dtype=dtype, device=wrapper.array.device)
+    elif _is_jax_array(wrapper.array):
+        array = jnp.zeros(shape, dtype=dtype)
+    else:
+        raise ValueError(f"unknown array type: {type(wrapper.array)}")
 
     new_array[0] = create_mts_array(array)
 
@@ -284,6 +319,10 @@ def _mts_array_copy(this, new_array):
         array = wrapper.array.copy()
     elif _is_torch_array(wrapper.array):
         array = wrapper.array.clone()
+    elif _is_jax_array(wrapper.array):
+        array = jnp.array(wrapper.array)
+    else:
+        raise ValueError(f"unknown array type: {type(wrapper.array)}")
 
     new_array[0] = create_mts_array(array)
 
@@ -459,8 +498,14 @@ def mts_array_origin_pytorch(this, origin):
     origin[0] = _origin_pytorch()
 
 
+@catch_exceptions
+def mts_array_origin_jax(this, origin):
+    origin[0] = _origin_jax()
+
+
 _MTS_ARRAY_ORIGIN_NUMPY = _cast_to_ctype_functype(mts_array_origin_numpy, "origin")
 _MTS_ARRAY_ORIGIN_PYTORCH = _cast_to_ctype_functype(mts_array_origin_pytorch, "origin")
+_MTS_ARRAY_ORIGIN_JAX = _cast_to_ctype_functype(mts_array_origin_jax, "origin")
 
 
 # DLPack device type codes (from dlpack.h DLDeviceType enum)
@@ -502,8 +547,21 @@ def _mts_array_device_pytorch(this, device_ptr):
             device_ptr[0] = DLDevice(device_type=_KDLCPU, device_id=0)
 
 
+@catch_exceptions
+def _mts_array_device_jax(this, device_ptr):
+    wrapper = _KNOWN_ARRAY_WRAPPERS[this]
+    array = wrapper.array
+    try:
+        device_type, device_id = array.__dlpack_device__()
+        device_ptr[0] = DLDevice(device_type=device_type, device_id=device_id)
+    except Exception:
+        # Fallback: jax CPU arrays
+        device_ptr[0] = DLDevice(device_type=_KDLCPU, device_id=0)
+
+
 _MTS_ARRAY_DEVICE_NUMPY = _cast_to_ctype_functype(_mts_array_device_numpy, "device")
 _MTS_ARRAY_DEVICE_PYTORCH = _cast_to_ctype_functype(_mts_array_device_pytorch, "device")
+_MTS_ARRAY_DEVICE_JAX = _cast_to_ctype_functype(_mts_array_device_jax, "device")
 
 
 # DLPack dtype type codes
@@ -541,6 +599,10 @@ if HAS_TORCH:
         torch.complex128: (_KDLCOMPLEX, 128),
     }
 
+# JAX dtype -> (DLDataType code, bits) -- uses numpy-compatible dtype.kind
+# since jax dtypes have .kind attribute like numpy dtypes
+_JAX_DTYPE_TO_DLPACK = _NUMPY_KIND_TO_DLPACK  # same mapping via dtype.kind
+
 
 @catch_exceptions
 def _mts_array_dtype_numpy(this, dtype_ptr):
@@ -563,8 +625,20 @@ def _mts_array_dtype_pytorch(this, dtype_ptr):
     dtype_ptr[0] = DLDataType(code=code, bits=bits, lanes=1)
 
 
+@catch_exceptions
+def _mts_array_dtype_jax(this, dtype_ptr):
+    wrapper = _KNOWN_ARRAY_WRAPPERS[this]
+    dt = wrapper.array.dtype
+    # jax dtypes have .kind like numpy
+    code = _JAX_DTYPE_TO_DLPACK.get(dt.kind)
+    if code is None:
+        raise ValueError(f"unsupported jax dtype kind: '{dt.kind}' ({dt})")
+    dtype_ptr[0] = DLDataType(code=code, bits=dt.itemsize * 8, lanes=1)
+
+
 _MTS_ARRAY_DTYPE_NUMPY = _cast_to_ctype_functype(_mts_array_dtype_numpy, "dtype")
 _MTS_ARRAY_DTYPE_PYTORCH = _cast_to_ctype_functype(_mts_array_dtype_pytorch, "dtype")
+_MTS_ARRAY_DTYPE_JAX = _cast_to_ctype_functype(_mts_array_dtype_jax, "dtype")
 
 
 # The default value for all Python-provided `mts_array_t`. Only the first two members
