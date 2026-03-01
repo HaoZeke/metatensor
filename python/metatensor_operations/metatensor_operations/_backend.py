@@ -9,7 +9,6 @@
 #
 # Any change to this file MUST be also be made to `metatensor/torch/operations.py`.
 import re
-import warnings
 from typing import Union
 
 import numpy as np
@@ -75,16 +74,9 @@ def _version_at_least(version, expected):
 def isinstance_metatensor(value, typename):
     assert typename in ("Labels", "TensorBlock", "TensorMap")
 
-    if _HAS_TORCH and isinstance(value, torch.ScriptObject):
-        is_metatensor_torch_class = "metatensor" in str(value._type())
-        if is_metatensor_torch_class:
-            warnings.warn(
-                "Trying to use operations from metatensor with objects from "
-                "metatensor-torch, you should use the operation from "
-                "`metatensor.torch` as well, e.g. `metatensor.torch.add(...)` "
-                "instead of `metatensor.add(...)`",
-                stacklevel=2,
-            )
+    # With unified TensorMap (LSP unification), metatensor.torch re-exports the
+    # core types. TorchScript ScriptObjects are handled by the bridge layer
+    # (_bridge.py) and should be converted before reaching operations.
 
     if typename == "Labels":
         return isinstance(value, Labels)
