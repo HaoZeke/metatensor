@@ -8,15 +8,21 @@ from . import utils  # noqa: F401
 from ._c_lib import _load_library
 from .version import __version__  # noqa: F401
 
+# Re-export unified core types -- these ARE the canonical types
+import metatensor as _metatensor_core
+
+Labels = _metatensor_core.Labels
+TensorBlock = _metatensor_core.TensorBlock
+TensorMap = _metatensor_core.TensorMap
 
 sys.modules["metatensor.torch"] = sys.modules[__name__]
 
 if os.environ.get("METATENSOR_IMPORT_FOR_SPHINX", "0") != "0" or TYPE_CHECKING:
     from .documentation import (
-        Labels,
+        Labels,  # noqa: F811
         LabelsEntry,
-        TensorBlock,
-        TensorMap,
+        TensorBlock,  # noqa: F811
+        TensorMap,  # noqa: F811
         dtype_name,
         load_block_buffer,
         load_buffer,
@@ -30,10 +36,13 @@ if os.environ.get("METATENSOR_IMPORT_FOR_SPHINX", "0") != "0" or TYPE_CHECKING:
     )
 else:
     _load_library()
-    Labels = torch.classes.metatensor.Labels
-    LabelsEntry = torch.classes.metatensor.LabelsEntry
-    TensorBlock = torch.classes.metatensor.TensorBlock
-    TensorMap = torch.classes.metatensor.TensorMap
+
+    # TorchScript C++ classes available for export path
+    _TorchScriptLabels = torch.classes.metatensor.Labels
+    _TorchScriptLabelsEntry = torch.classes.metatensor.LabelsEntry
+    _TorchScriptTensorBlock = torch.classes.metatensor.TensorBlock
+    _TorchScriptTensorMap = torch.classes.metatensor.TensorMap
+    LabelsEntry = _metatensor_core.LabelsEntry
 
     version = torch.ops.metatensor.version
     dtype_name = torch.ops.metatensor.dtype_name
@@ -41,6 +50,12 @@ else:
     load_block_buffer = torch.ops.metatensor.load_block_buffer
     load_labels_buffer = torch.ops.metatensor.load_labels_buffer
     save_buffer = torch.ops.metatensor.save_buffer
+
+# Bridge functions for TorchScript <-> unified type conversion
+from ._bridge import (  # noqa: E402, F401
+    from_torch_script,
+    to_torch_script,
+)
 
 from .serialization import (  # noqa: F401, E402
     load,

@@ -93,17 +93,6 @@ class TensorMap:
                     f"got {blocks[0].dtype} and {block.dtype}"
                 )
 
-        if len(blocks) > 0 and not data.array_device_is_cpu(blocks[0].values):
-            warnings.warn(
-                "Blocks values and keys for this TensorMap are on different devices: "
-                f"keys are always on CPU, and blocks values are on device "
-                f"'{blocks[0].device}'. If you are using PyTorch and need the labels "
-                f"to also be on {blocks[0].device}, you should use "
-                "`metatensor.torch.TensorMap`.",
-                category=DeviceWarning,
-                stacklevel=2,
-            )
-
         # all blocks are moved into the tensor map, assign NULL to `block._ptr` to
         # prevent accessing invalid data from Python and double free
         for block in blocks:
