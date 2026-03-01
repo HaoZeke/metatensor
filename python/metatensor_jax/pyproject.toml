@@ -1,0 +1,38 @@
+[project]
+name = "metatensor-jax"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+readme = "README.rst"
+license = "BSD-3-Clause"
+description = "JAX bindings for metatensor"
+
+keywords = ["machine learning", "molecular modeling", "jax"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+]
+
+dependencies = [
+    "metatensor-core",
+    "jax",
+    "jaxlib",
+]
+
+[project.urls]
+homepage = "https://docs.metatensor.org/latest/"
+repository = "https://github.com/metatensor/metatensor"
+
+[build-system]
+requires = ["setuptools >=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+zip-safe = true
+
+[tool.pytest.ini_options]
+python_files = ["*.py"]
+testpaths = ["tests"]
