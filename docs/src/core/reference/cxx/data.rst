@@ -6,11 +6,6 @@ Data arrays
 
 ------------------------------------
 
-.. doxygenclass:: metatensor::OwnedMtsArray
-    :members:
-
-------------------------------------
-
 .. doxygenclass:: metatensor::SimpleDataArray
     :members: SimpleDataArray, operator=, view, from_mts_array
 

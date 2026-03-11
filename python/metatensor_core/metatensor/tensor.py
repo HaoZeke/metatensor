@@ -8,7 +8,7 @@ from typing import BinaryIO, Dict, List, Optional, Sequence, Union
 import numpy as np
 
 from . import data
-from ._c_api import c_uintptr_t, mts_block_t, mts_labels_t
+from ._c_api import c_uintptr_t, mts_array_t, mts_block_t, mts_labels_t
 from ._c_lib import _get_library
 from .block import TensorBlock
 from .data import Device, DeviceWarning, DType
@@ -550,12 +550,9 @@ class TensorMap:
         """
         keys_to_move = _normalize_keys_to_move(keys_to_move)
         fv_mts = _make_fill_value_array(self, fill_value)
-        try:
-            ptr = self._lib.mts_tensormap_keys_to_samples(
-                self._ptr, keys_to_move._as_mts_labels_t(), sort_samples, fv_mts
-            )
-        finally:
-            _cleanup_fill_value(fv_mts)
+        ptr = self._lib.mts_tensormap_keys_to_samples(
+            self._ptr, keys_to_move._as_mts_labels_t(), sort_samples, fv_mts
+        )
         return TensorMap._from_ptr(ptr)
 
     def components_to_properties(
@@ -630,12 +627,9 @@ class TensorMap:
         """
         keys_to_move = _normalize_keys_to_move(keys_to_move)
         fv_mts = _make_fill_value_array(self, fill_value)
-        try:
-            ptr = self._lib.mts_tensormap_keys_to_properties(
-                self._ptr, keys_to_move._as_mts_labels_t(), sort_samples, fv_mts
-            )
-        finally:
-            _cleanup_fill_value(fv_mts)
+        ptr = self._lib.mts_tensormap_keys_to_properties(
+            self._ptr, keys_to_move._as_mts_labels_t(), sort_samples, fv_mts
+        )
         return TensorMap._from_ptr(ptr)
 
     @property
@@ -782,15 +776,15 @@ class TensorMap:
 
 
 def _make_fill_value_array(tensor_map, fill_value):
-    """Create a ctypes pointer to an mts_array_t wrapping a shape-(1,) array
-    with the given scalar fill_value.
+    """Create an mts_array_t wrapping a shape-(1,) array with the given scalar.
 
     The dtype is inferred from the first block's values array.
-    Returns a ctypes.POINTER(mts_array_t) suitable for passing to C functions.
-    Returns None if the TensorMap has no blocks.
+    Returns an mts_array_t suitable for passing by value to C functions
+    (ownership transfers to the callee).
+    Returns a zero-initialized mts_array_t if the TensorMap has no blocks.
     """
     if len(tensor_map) == 0:
-        return None
+        return mts_array_t()
     block = tensor_map.block_by_id(0)
     values = block.values
 
@@ -799,23 +793,13 @@ def _make_fill_value_array(tensor_map, fill_value):
 
         if isinstance(values, torch.Tensor):
             fv_array = torch.tensor([fill_value], dtype=values.dtype)
-            mts = data.create_mts_array(fv_array)
-            return ctypes.pointer(mts)
+            return data.create_mts_array(fv_array)
     except ImportError:
         pass
 
     # numpy fallback
     fv_array = np.array([fill_value], dtype=values.dtype)
-    mts = data.create_mts_array(fv_array)
-    return ctypes.pointer(mts)
-
-
-def _cleanup_fill_value(fv_ptr):
-    """Destroy the fill_value mts_array_t created by _make_fill_value_array."""
-    if fv_ptr is not None:
-        mts = fv_ptr.contents
-        if mts.destroy is not None:
-            mts.destroy(mts.ptr)
+    return data.create_mts_array(fv_array)
 
 
 def _normalize_keys_to_move(keys_to_move: Union[str, Sequence[str], Labels]) -> Labels:

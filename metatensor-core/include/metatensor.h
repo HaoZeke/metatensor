@@ -948,6 +948,10 @@ mts_status_t mts_tensormap_blocks_matching(const struct mts_tensormap_t *tensor,
  * @param keys_to_move description of the keys to move
  * @param sort_samples whether to sort the samples lexicographically after
  *                     merging blocks
+ * @param fill_value an `mts_array_t` with shape `(1,)` and the same dtype as
+ *                   the data, used to fill missing entries. Ownership is
+ *                   transferred (the array is destroyed after the call). Pass a
+ *                   zero-initialized `mts_array_t` for empty tensor maps.
  *
  * @returns A pointer to the newly allocated tensor map, or a `NULL` pointer in
  *          case of error. In case of error, you can use `mts_last_error()`
@@ -956,7 +960,7 @@ mts_status_t mts_tensormap_blocks_matching(const struct mts_tensormap_t *tensor,
 struct mts_tensormap_t *mts_tensormap_keys_to_properties(const struct mts_tensormap_t *tensor,
                                                          struct mts_labels_t keys_to_move,
                                                          bool sort_samples,
-                                                         const struct mts_array_t *fill_value);
+                                                         struct mts_array_t fill_value);
 
 /**
  * Move the given dimensions from the component labels to the property labels
@@ -1002,15 +1006,19 @@ struct mts_tensormap_t *mts_tensormap_components_to_properties(struct mts_tensor
  * @param keys_to_move description of the keys to move
  * @param sort_samples whether to sort the samples lexicographically after
  *                     merging blocks or not
+ * @param fill_value an `mts_array_t` with shape `(1,)` and the same dtype as
+ *                   the data, used to fill missing entries. Ownership is
+ *                   transferred (the array is destroyed after the call). Pass a
+ *                   zero-initialized `mts_array_t` for empty tensor maps.
  *
- * @returns The status code of this operation. If the status is not
- *          `MTS_SUCCESS`, you can use `mts_last_error()` to get the full
- *          error message.
+ * @returns A pointer to the newly allocated tensor map, or a `NULL` pointer in
+ *          case of error. In case of error, you can use `mts_last_error()`
+ *          to get the error message.
  */
 struct mts_tensormap_t *mts_tensormap_keys_to_samples(const struct mts_tensormap_t *tensor,
                                                       struct mts_labels_t keys_to_move,
                                                       bool sort_samples,
-                                                      const struct mts_array_t *fill_value);
+                                                      struct mts_array_t fill_value);
 
 /**
  * Set or update the info (i.e. global metadata) for `key` to `value` for this

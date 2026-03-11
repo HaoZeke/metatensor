@@ -329,6 +329,10 @@ pub unsafe extern "C" fn mts_tensormap_blocks_matching(
 /// @param keys_to_move description of the keys to move
 /// @param sort_samples whether to sort the samples lexicographically after
 ///                     merging blocks
+/// @param fill_value an `mts_array_t` with shape `(1,)` and the same dtype as
+///                   the data, used to fill missing entries. Ownership is
+///                   transferred (the array is destroyed after the call). Pass a
+///                   zero-initialized `mts_array_t` for empty tensor maps.
 ///
 /// @returns A pointer to the newly allocated tensor map, or a `NULL` pointer in
 ///          case of error. In case of error, you can use `mts_last_error()`
@@ -338,7 +342,7 @@ pub unsafe extern "C" fn mts_tensormap_keys_to_properties(
     tensor: *const mts_tensormap_t,
     keys_to_move: mts_labels_t,
     sort_samples: bool,
-    fill_value: *const mts_array_t,
+    fill_value: mts_array_t,
 ) -> *mut mts_tensormap_t {
     let mut result = std::ptr::null_mut();
     let unwind_wrapper = std::panic::AssertUnwindSafe(&mut result);
@@ -348,21 +352,16 @@ pub unsafe extern "C" fn mts_tensormap_keys_to_properties(
 
         let keys_to_move = mts_labels_to_rust(&keys_to_move)?;
 
-        if fill_value.is_null() {
-            if (*tensor).keys().count() > 0 {
-                return Err(Error::InvalidParameter(
-                    "fill_value must not be null for non-empty TensorMap".into()
-                ));
-            }
-            let dummy = mts_array_t::null();
-            let moved = (*tensor).keys_to_properties(&keys_to_move, sort_samples, &dummy)?;
-            let _ = &unwind_wrapper;
-            *unwind_wrapper.0 = mts_tensormap_t::into_boxed_raw(moved);
-        } else {
-            let moved = (*tensor).keys_to_properties(&keys_to_move, sort_samples, &*fill_value)?;
-            let _ = &unwind_wrapper;
-            *unwind_wrapper.0 = mts_tensormap_t::into_boxed_raw(moved);
+        if fill_value.ptr.is_null() && (*tensor).keys().count() > 0 {
+            return Err(Error::InvalidParameter(
+                "fill_value must not be null for non-empty TensorMap".into()
+            ));
         }
+
+        let moved = (*tensor).keys_to_properties(&keys_to_move, sort_samples, &fill_value)?;
+        let _ = &unwind_wrapper;
+        *unwind_wrapper.0 = mts_tensormap_t::into_boxed_raw(moved);
+
         Ok(())
     });
 
@@ -448,16 +447,20 @@ pub unsafe extern "C" fn mts_tensormap_components_to_properties(
 /// @param keys_to_move description of the keys to move
 /// @param sort_samples whether to sort the samples lexicographically after
 ///                     merging blocks or not
+/// @param fill_value an `mts_array_t` with shape `(1,)` and the same dtype as
+///                   the data, used to fill missing entries. Ownership is
+///                   transferred (the array is destroyed after the call). Pass a
+///                   zero-initialized `mts_array_t` for empty tensor maps.
 ///
-/// @returns The status code of this operation. If the status is not
-///          `MTS_SUCCESS`, you can use `mts_last_error()` to get the full
-///          error message.
+/// @returns A pointer to the newly allocated tensor map, or a `NULL` pointer in
+///          case of error. In case of error, you can use `mts_last_error()`
+///          to get the error message.
 #[no_mangle]
 pub unsafe extern "C" fn mts_tensormap_keys_to_samples(
     tensor: *const mts_tensormap_t,
     keys_to_move: mts_labels_t,
     sort_samples: bool,
-    fill_value: *const mts_array_t,
+    fill_value: mts_array_t,
 ) -> *mut mts_tensormap_t {
     let mut result = std::ptr::null_mut();
     let unwind_wrapper = std::panic::AssertUnwindSafe(&mut result);
@@ -467,21 +470,16 @@ pub unsafe extern "C" fn mts_tensormap_keys_to_samples(
 
         let keys_to_move = mts_labels_to_rust(&keys_to_move)?;
 
-        if fill_value.is_null() {
-            if (*tensor).keys().count() > 0 {
-                return Err(Error::InvalidParameter(
-                    "fill_value must not be null for non-empty TensorMap".into()
-                ));
-            }
-            let dummy = mts_array_t::null();
-            let moved = (*tensor).keys_to_samples(&keys_to_move, sort_samples, &dummy)?;
-            let _ = &unwind_wrapper;
-            *unwind_wrapper.0 = mts_tensormap_t::into_boxed_raw(moved);
-        } else {
-            let moved = (*tensor).keys_to_samples(&keys_to_move, sort_samples, &*fill_value)?;
-            let _ = &unwind_wrapper;
-            *unwind_wrapper.0 = mts_tensormap_t::into_boxed_raw(moved);
+        if fill_value.ptr.is_null() && (*tensor).keys().count() > 0 {
+            return Err(Error::InvalidParameter(
+                "fill_value must not be null for non-empty TensorMap".into()
+            ));
         }
+
+        let moved = (*tensor).keys_to_samples(&keys_to_move, sort_samples, &fill_value)?;
+        let _ = &unwind_wrapper;
+        *unwind_wrapper.0 = mts_tensormap_t::into_boxed_raw(moved);
+
         Ok(())
     });
 
