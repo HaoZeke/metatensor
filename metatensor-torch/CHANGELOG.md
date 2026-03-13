@@ -4,9 +4,7 @@ All notable changes to metatensor-torch are documented here, following the [keep
 a changelog](https://keepachangelog.com/en/1.1.0/) format. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/metatensor/metatensor/)
-
-<!-- Possible sections for each package:
+<!-- Possible sections
 
 ### Added
 
@@ -17,7 +15,29 @@ a changelog](https://keepachangelog.com/en/1.1.0/) format. This project follows
 ### Removed
 -->
 
+## [Unreleased](https://github.com/metatensor/metatensor/)
+
+### Changed
+
+- Replaced `LabelsUserData` / `set_user_data` with array-primary Labels. Torch
+  constructors pass their tensor directly as an `mts_array_t` at Labels
+  construction via `from_array_assume_unique`. No mandatory GPU-to-CPU copy. CPU
+  materialization happens lazily via DLPack only when values are accessed. The
+  `TorchLabelsArrayData` vtable implements `device()` and `as_dlpack()` for
+  device-aware label access.
+
+### Fixed
+
+- Meta device Labels now round-trip correctly through Rust.
+  `LabelsHolder::to(meta)` creates Meta-backed Rust Labels with pre-filled CPU
+  values via `set_cached_values`, so Rust never attempts DLPack materialization
+  on Meta (which has no storage). `TensorMapHolder` caches keys to preserve
+  device info across round-trips, fixing `device()` and operations
+  (`keys_to_samples`, `keys_to_properties`, `components_to_properties`) that
+  previously lost Meta device info.
+
 ## [Version 0.8.5](https://github.com/metatensor/metatensor/releases/tag/metatensor-torch-v0.8.5) - 2026-03-27
+
 
 ### Added
 
