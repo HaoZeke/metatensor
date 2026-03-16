@@ -327,6 +327,8 @@ pub unsafe extern "C" fn mts_tensormap_blocks_matching(
 ///
 /// @param tensor pointer to an existing tensor map
 /// @param keys_to_move description of the keys to move
+/// @param fill_value an mts_array_t with shape (1,) and the same dtype as the
+///                   data, used to fill missing entries when merging blocks
 /// @param sort_samples whether to sort the samples lexicographically after
 ///                     merging blocks
 ///
@@ -337,8 +339,8 @@ pub unsafe extern "C" fn mts_tensormap_blocks_matching(
 pub unsafe extern "C" fn mts_tensormap_keys_to_properties(
     tensor: *const mts_tensormap_t,
     keys_to_move: mts_labels_t,
-    sort_samples: bool,
     fill_value: mts_array_t,
+    sort_samples: bool,
 ) -> *mut mts_tensormap_t {
     let mut result = std::ptr::null_mut();
     let unwind_wrapper = std::panic::AssertUnwindSafe(&mut result);
@@ -348,7 +350,7 @@ pub unsafe extern "C" fn mts_tensormap_keys_to_properties(
 
         let keys_to_move = mts_labels_to_rust(&keys_to_move)?;
 
-        let moved = (*tensor).keys_to_properties(&keys_to_move, sort_samples, fill_value)?;
+        let moved = (*tensor).keys_to_properties(&keys_to_move, fill_value, sort_samples)?;
         let _ = &unwind_wrapper;
         *unwind_wrapper.0 = mts_tensormap_t::into_boxed_raw(moved);
         Ok(())
@@ -434,6 +436,8 @@ pub unsafe extern "C" fn mts_tensormap_components_to_properties(
 ///
 /// @param tensor pointer to an existing tensor map
 /// @param keys_to_move description of the keys to move
+/// @param fill_value an mts_array_t with shape (1,) and the same dtype as the
+///                   data, used to fill missing entries when merging blocks
 /// @param sort_samples whether to sort the samples lexicographically after
 ///                     merging blocks or not
 ///
@@ -444,8 +448,8 @@ pub unsafe extern "C" fn mts_tensormap_components_to_properties(
 pub unsafe extern "C" fn mts_tensormap_keys_to_samples(
     tensor: *const mts_tensormap_t,
     keys_to_move: mts_labels_t,
-    sort_samples: bool,
     fill_value: mts_array_t,
+    sort_samples: bool,
 ) -> *mut mts_tensormap_t {
     let mut result = std::ptr::null_mut();
     let unwind_wrapper = std::panic::AssertUnwindSafe(&mut result);
@@ -455,7 +459,7 @@ pub unsafe extern "C" fn mts_tensormap_keys_to_samples(
 
         let keys_to_move = mts_labels_to_rust(&keys_to_move)?;
 
-        let moved = (*tensor).keys_to_samples(&keys_to_move, sort_samples, fill_value)?;
+        let moved = (*tensor).keys_to_samples(&keys_to_move, fill_value, sort_samples)?;
         let _ = &unwind_wrapper;
         *unwind_wrapper.0 = mts_tensormap_t::into_boxed_raw(moved);
         Ok(())

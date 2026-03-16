@@ -946,6 +946,8 @@ mts_status_t mts_tensormap_blocks_matching(const struct mts_tensormap_t *tensor,
  *
  * @param tensor pointer to an existing tensor map
  * @param keys_to_move description of the keys to move
+ * @param fill_value an mts_array_t with shape (1,) and the same dtype as the
+ *                   data, used to fill missing entries when merging blocks
  * @param sort_samples whether to sort the samples lexicographically after
  *                     merging blocks
  *
@@ -955,8 +957,8 @@ mts_status_t mts_tensormap_blocks_matching(const struct mts_tensormap_t *tensor,
  */
 struct mts_tensormap_t *mts_tensormap_keys_to_properties(const struct mts_tensormap_t *tensor,
                                                          struct mts_labels_t keys_to_move,
-                                                         bool sort_samples,
-                                                         struct mts_array_t fill_value);
+                                                         struct mts_array_t fill_value,
+                                                         bool sort_samples);
 
 /**
  * Move the given dimensions from the component labels to the property labels
@@ -1000,6 +1002,8 @@ struct mts_tensormap_t *mts_tensormap_components_to_properties(struct mts_tensor
  *
  * @param tensor pointer to an existing tensor map
  * @param keys_to_move description of the keys to move
+ * @param fill_value an mts_array_t with shape (1,) and the same dtype as the
+ *                   data, used to fill missing entries when merging blocks
  * @param sort_samples whether to sort the samples lexicographically after
  *                     merging blocks or not
  *
@@ -1009,8 +1013,8 @@ struct mts_tensormap_t *mts_tensormap_components_to_properties(struct mts_tensor
  */
 struct mts_tensormap_t *mts_tensormap_keys_to_samples(const struct mts_tensormap_t *tensor,
                                                       struct mts_labels_t keys_to_move,
-                                                      bool sort_samples,
-                                                      struct mts_array_t fill_value);
+                                                      struct mts_array_t fill_value,
+                                                      bool sort_samples);
 
 /**
  * Set or update the info (i.e. global metadata) for `key` to `value` for this

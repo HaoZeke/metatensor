@@ -348,8 +348,8 @@ def setup_functions(lib):
     lib.mts_tensormap_keys_to_properties.argtypes = [
         POINTER(mts_tensormap_t),
         mts_labels_t,
-        ctypes.c_bool,
         mts_array_t,
+        ctypes.c_bool,
     ]
     lib.mts_tensormap_keys_to_properties.restype = POINTER(mts_tensormap_t)
 
@@ -363,8 +363,8 @@ def setup_functions(lib):
     lib.mts_tensormap_keys_to_samples.argtypes = [
         POINTER(mts_tensormap_t),
         mts_labels_t,
-        ctypes.c_bool,
         mts_array_t,
+        ctypes.c_bool,
     ]
     lib.mts_tensormap_keys_to_samples.restype = POINTER(mts_tensormap_t)
 

@@ -332,7 +332,7 @@ static std::vector<std::string> extract_list_str(const torch::IValue& keys_to_mo
     }
 }
 
-TensorMap TensorMapHolder::keys_to_properties(torch::IValue keys_to_move, bool sort_samples, torch::Scalar fill_value) const {
+TensorMap TensorMapHolder::keys_to_properties(torch::IValue keys_to_move, torch::Scalar fill_value, bool sort_samples) const {
     auto device = this->keys()->values().device();
 
     // Create a fill_value mts_array_t matching the tensor's dtype.
@@ -350,12 +350,12 @@ TensorMap TensorMapHolder::keys_to_properties(torch::IValue keys_to_move, bool s
 
     if (keys_to_move.isString() || keys_to_move.isList() || keys_to_move.isTuple()) {
         auto selection = extract_list_str(keys_to_move, "TensorMap::keys_to_properties first argument");
-        auto tensor = tensor_.keys_to_properties(selection, sort_samples, fv_array);
+        auto tensor = tensor_.keys_to_properties(selection, fv_array, sort_samples);
         auto result = torch::make_intrusive<TensorMapHolder>(TensorMapHolder(std::move(tensor)));
         return result->to(torch::nullopt, device);
     } else if (keys_to_move.isCustomClass()) {
         auto selection = keys_to_move.toCustomClass<LabelsHolder>();
-        auto tensor = tensor_.keys_to_properties(selection->as_metatensor(), sort_samples, fv_array);
+        auto tensor = tensor_.keys_to_properties(selection->as_metatensor(), fv_array, sort_samples);
         auto result = torch::make_intrusive<TensorMapHolder>(TensorMapHolder(std::move(tensor)));
         return result->to(torch::nullopt, device);
     } else {
@@ -365,7 +365,7 @@ TensorMap TensorMapHolder::keys_to_properties(torch::IValue keys_to_move, bool s
     }
 }
 
-TensorMap TensorMapHolder::keys_to_samples(torch::IValue keys_to_move, bool sort_samples, torch::Scalar fill_value) const {
+TensorMap TensorMapHolder::keys_to_samples(torch::IValue keys_to_move, torch::Scalar fill_value, bool sort_samples) const {
     auto device = this->keys()->values().device();
 
     // Create a fill_value mts_array_t matching the tensor's dtype.
@@ -383,12 +383,12 @@ TensorMap TensorMapHolder::keys_to_samples(torch::IValue keys_to_move, bool sort
 
     if (keys_to_move.isString() || keys_to_move.isList() || keys_to_move.isTuple()) {
         auto selection = extract_list_str(keys_to_move, "TensorMap::keys_to_samples first argument");
-        auto tensor = tensor_.keys_to_samples(selection, sort_samples, fv_array);
+        auto tensor = tensor_.keys_to_samples(selection, fv_array, sort_samples);
         auto result = torch::make_intrusive<TensorMapHolder>(TensorMapHolder(std::move(tensor)));
         return result->to(torch::nullopt, device);
     } else if (keys_to_move.isCustomClass()) {
         auto selection = keys_to_move.toCustomClass<LabelsHolder>();
-        auto tensor = tensor_.keys_to_samples(selection->as_metatensor(), sort_samples, fv_array);
+        auto tensor = tensor_.keys_to_samples(selection->as_metatensor(), fv_array, sort_samples);
         auto result = torch::make_intrusive<TensorMapHolder>(TensorMapHolder(std::move(tensor)));
         return result->to(torch::nullopt, device);
     } else {

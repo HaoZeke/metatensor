@@ -28,7 +28,7 @@ impl TensorMap {
     ///
     /// This function is only implemented if all merged block have the same
     /// property labels.
-    pub fn keys_to_samples(&self, keys_to_move: &Labels, sort_samples: bool, fill_value: mts_array_t) -> Result<TensorMap, Error> {
+    pub fn keys_to_samples(&self, keys_to_move: &Labels, fill_value: mts_array_t, sort_samples: bool) -> Result<TensorMap, Error> {
         if self.keys.is_empty() {
             return Err(Error::InvalidParameter(
                 "there are no keys to move in an empty TensorMap".into()

@@ -609,25 +609,25 @@ class TensorMapWrap:
     def keys_to_samples(
         self,
         keys_to_move: Union[str, List[str], Labels],
-        sort_samples: bool,
         fill_value: float = 0,
+        sort_samples: bool = True,
     ) -> TensorMap:
         return self._c.keys_to_samples(
             keys_to_move=keys_to_move,
-            sort_samples=sort_samples,
             fill_value=fill_value,
+            sort_samples=sort_samples,
         )
 
     def keys_to_properties(
         self,
         keys_to_move: Union[str, List[str], Labels],
-        sort_samples: bool,
         fill_value: float = 0,
+        sort_samples: bool = True,
     ) -> TensorMap:
         return self._c.keys_to_properties(
             keys_to_move=keys_to_move,
-            sort_samples=sort_samples,
             fill_value=fill_value,
+            sort_samples=sort_samples,
         )
 
     def components_to_properties(

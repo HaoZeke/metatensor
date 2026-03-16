@@ -511,8 +511,8 @@ class TensorMap:
         self,
         keys_to_move: Union[str, Sequence[str]],
         *,
-        sort_samples=True,
         fill_value=0.0,
+        sort_samples=True,
     ) -> "TensorMap":
         """
         Merge blocks along the samples axis, adding ``keys_to_move`` to the end of the
@@ -537,10 +537,10 @@ class TensorMap:
         properties values.
 
         :param keys_to_move: description of the keys to move
-        :param sort_samples: whether to sort the merged samples or keep them in the
-            order in which they appear in the original blocks
         :param fill_value: scalar value used to fill missing entries in the merged
             blocks. Defaults to 0.0.
+        :param sort_samples: whether to sort the merged samples or keep them in the
+            order in which they appear in the original blocks
         :return: a new :py:class:`TensorMap` with merged blocks
 
         .. note::
@@ -551,7 +551,7 @@ class TensorMap:
         keys_to_move = _normalize_keys_to_move(keys_to_move)
         fv_mts = _make_fill_value_array(self, fill_value)
         ptr = self._lib.mts_tensormap_keys_to_samples(
-            self._ptr, keys_to_move._as_mts_labels_t(), sort_samples, fv_mts
+            self._ptr, keys_to_move._as_mts_labels_t(), fv_mts, sort_samples
         )
         return TensorMap._from_ptr(ptr)
 
@@ -575,8 +575,8 @@ class TensorMap:
         self,
         keys_to_move: Union[str, Sequence[str], Labels],
         *,
-        sort_samples=True,
         fill_value=0.0,
+        sort_samples=True,
     ) -> "TensorMap":
         """
         Merge blocks along the properties direction, adding ``keys_to_move`` at the
@@ -614,10 +614,10 @@ class TensorMap:
         appear in the blocks.
 
         :param keys_to_move: description of the keys to move
-        :param sort_samples: whether to sort the merged samples or keep them in the
-            order in which they appear in the original blocks
         :param fill_value: scalar value used to fill missing entries in the merged
             blocks. Defaults to 0.0.
+        :param sort_samples: whether to sort the merged samples or keep them in the
+            order in which they appear in the original blocks
         :return: a new :py:class:`TensorMap` with merged blocks
 
         .. note::
@@ -628,7 +628,7 @@ class TensorMap:
         keys_to_move = _normalize_keys_to_move(keys_to_move)
         fv_mts = _make_fill_value_array(self, fill_value)
         ptr = self._lib.mts_tensormap_keys_to_properties(
-            self._ptr, keys_to_move._as_mts_labels_t(), sort_samples, fv_mts
+            self._ptr, keys_to_move._as_mts_labels_t(), fv_mts, sort_samples
         )
         return TensorMap._from_ptr(ptr)
 
