@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
 use crate::labels::Labels;
-use crate::{Error, TensorBlock};
+use crate::{Error, TensorBlock, LabelValue};
 
 use crate::data::{mts_array_t, mts_data_movement_t};
 
 use super::TensorMap;
 use super::utils::{KeyAndBlock, remove_dimensions_from_keys, merge_samples, merge_gradient_samples};
+use super::merge_plan::{MergePlan, OutputBlockPlan, BlockMergePlan, GradientMergePlan};
 
 impl TensorMap {
     /// Merge blocks with the same value for selected keys dimensions along the
@@ -29,6 +30,16 @@ impl TensorMap {
     /// This function is only implemented if all merged block have the same
     /// property labels.
     pub fn keys_to_samples(&self, keys_to_move: &Labels, fill_value: mts_array_t, sort_samples: bool) -> Result<TensorMap, Error> {
+        let plan = self.keys_to_samples_plan(keys_to_move, sort_samples)?;
+        execute_samples_merge_plan(self, &plan, &fill_value)
+    }
+
+    /// Compute the merge plan for keys_to_samples without touching arrays.
+    ///
+    /// This returns a `MergePlan` that describes how to merge blocks along the
+    /// sample axis. The plan can be executed later with array-specific code,
+    /// enabling JAX traceability.
+    pub fn keys_to_samples_plan(&self, keys_to_move: &Labels, sort_samples: bool) -> Result<MergePlan, Error> {
         if self.keys.is_empty() {
             return Err(Error::InvalidParameter(
                 "there are no keys to move in an empty TensorMap".into()
@@ -45,31 +56,26 @@ impl TensorMap {
         let names_to_move = keys_to_move.names();
         let splitted_keys = remove_dimensions_from_keys(&self.keys, &names_to_move)?;
 
-        let mut new_blocks = Vec::new();
+        let mut output_blocks = Vec::new();
         if splitted_keys.new_keys.count() == 1 {
-            // create a single block with everything
             let blocks_to_merge = self.keys.iter()
+                .enumerate()
                 .zip(&self.blocks)
-                .map(|(key, block)| {
+                .map(|((block_index, key), block)| {
                     let mut moved_key = Vec::new();
                     for &i in &splitted_keys.dimensions_positions {
                         moved_key.push(key[i]);
                     }
-
-                    KeyAndBlock {
-                        key: moved_key,
-                        block
-                    }
+                    (block_index, KeyAndBlock { key: moved_key, block })
                 })
                 .collect::<Vec<_>>();
 
-            let block = merge_blocks_along_samples(
+            let plan = compute_samples_block_plan(
                 &blocks_to_merge,
                 &names_to_move,
                 sort_samples,
-                &fill_value,
             )?;
-            new_blocks.push(block);
+            output_blocks.push(plan);
         } else {
             for entry in &splitted_keys.new_keys {
                 let selection = Labels::new(
@@ -83,43 +89,39 @@ impl TensorMap {
                         let block = &self.blocks[i];
                         let key = &self.keys[i];
                         let mut moved_key = Vec::new();
-                        for &i in &splitted_keys.dimensions_positions {
-                            moved_key.push(key[i]);
+                        for &j in &splitted_keys.dimensions_positions {
+                            moved_key.push(key[j]);
                         }
-
-                        KeyAndBlock {
-                            key: moved_key,
-                            block
-                        }
+                        (i, KeyAndBlock { key: moved_key, block })
                     })
                     .collect::<Vec<_>>();
 
-                new_blocks.push(merge_blocks_along_samples(
+                let plan = compute_samples_block_plan(
                     &blocks_to_merge,
                     &names_to_move,
                     sort_samples,
-                    &fill_value,
-                )?);
+                )?;
+                output_blocks.push(plan);
             }
         }
-        let mut tensor = TensorMap::new(Arc::new(splitted_keys.new_keys), new_blocks)?;
-        for (k, v) in &self.info {
-            tensor.add_info(k, v.clone());
-        }
-        return Ok(tensor);
+
+        Ok(MergePlan {
+            new_keys: Arc::new(splitted_keys.new_keys),
+            output_blocks,
+        })
     }
 }
 
-/// Merge the given `blocks` along the sample axis.
-fn merge_blocks_along_samples(
-    blocks_to_merge: &[KeyAndBlock],
+
+/// Compute the merge plan for a group of blocks to be merged along samples.
+fn compute_samples_block_plan(
+    blocks_to_merge: &[(usize, KeyAndBlock)],
     extracted_names: &[&str],
     sort_samples: bool,
-    fill_value: &mts_array_t,
-) -> Result<TensorBlock, Error> {
+) -> Result<OutputBlockPlan, Error> {
     assert!(!blocks_to_merge.is_empty());
 
-    let first_block = blocks_to_merge[0].block;
+    let first_block = blocks_to_merge[0].1.block;
     for gradient in first_block.gradients().values() {
         if !gradient.gradients().is_empty() {
             return Err(Error::InvalidParameter(
@@ -131,7 +133,7 @@ fn merge_blocks_along_samples(
     let first_components_label = &first_block.components;
     let first_properties_label = &first_block.properties;
 
-    for KeyAndBlock{block, ..} in blocks_to_merge {
+    for (_, KeyAndBlock{block, ..}) in blocks_to_merge {
         if &block.components != first_components_label {
             return Err(Error::InvalidParameter(
                 "can not move keys to samples if the blocks have \
@@ -142,18 +144,22 @@ fn merge_blocks_along_samples(
         if &block.properties != first_properties_label {
             return Err(Error::InvalidParameter(
                 "can not move keys to samples if the blocks have \
-                different property labels".into() // TODO: this might be possible
+                different property labels".into()
             ))
         }
     }
 
-    // collect and merge samples across the blocks
+    let key_and_blocks: Vec<KeyAndBlock> = blocks_to_merge.iter()
+        .map(|(_, kb)| KeyAndBlock { key: kb.key.clone(), block: kb.block })
+        .collect();
+
+    // merge samples with new dimension order: old_sample_names + extracted_names
     let new_sample_names = first_block.samples.names().iter()
         .chain(extracted_names.iter())
         .copied()
         .collect::<Vec<_>>();
     let (merged_samples, samples_mappings) = merge_samples(
-        blocks_to_merge,
+        &key_and_blocks,
         &new_sample_names,
         sort_samples,
     );
@@ -161,82 +167,141 @@ fn merge_blocks_along_samples(
     let new_components = first_block.components.to_vec();
     let new_properties = Arc::clone(&first_block.properties);
 
-    let mut new_shape = first_block.values.shape()?.to_vec();
-    new_shape[0] = merged_samples.count();
-    let mut new_data = first_block.values.create(&new_shape, fill_value)?;
+    let first_shape = first_block.values.shape()?;
+    let mut output_shape = first_shape.to_vec();
+    output_shape[0] = merged_samples.count();
 
-    debug_assert_eq!(blocks_to_merge.len(), samples_mappings.len());
-    for (KeyAndBlock{block, ..}, samples_mapping) in blocks_to_merge.iter().zip(&samples_mappings) {
-        let mut movements = Vec::new();
-        for (sample_i, &new_sample_i) in samples_mapping.iter().enumerate() {
-            movements.push(mts_data_movement_t {
+    // compute block plans
+    let mut block_plans = Vec::new();
+    for ((block_index, _), samples_mapping) in blocks_to_merge.iter().zip(&samples_mappings) {
+        let movements: Vec<mts_data_movement_t> = samples_mapping.iter().enumerate().map(|(sample_i, &new_sample_i)| {
+            mts_data_movement_t {
                 sample_in: sample_i,
                 sample_out: new_sample_i,
                 properties_start_in: 0,
                 properties_start_out: 0,
                 properties_length: new_properties.count(),
-            });
-        }
-        new_data.move_data(&block.values, &movements)?;
+            }
+        }).collect();
+
+        block_plans.push(BlockMergePlan {
+            block_index: *block_index,
+            samples_mapping: samples_mapping.clone(),
+            property_range: Some(0..new_properties.count()),
+            movements,
+        });
     }
 
-    let mut new_block = TensorBlock::new(
-        new_data,
-        merged_samples,
-        new_components,
-        Arc::clone(&new_properties)
-    ).expect("invalid block");
-
-    // now collect & merge the different gradients
-    for (parameter, first_gradient) in first_block.gradients() {
+    // gradient plans
+    let mut gradient_plans = Vec::new();
+    for (parameter, _first_gradient) in first_block.gradients() {
         let new_gradient_samples = merge_gradient_samples(
-            blocks_to_merge, parameter, &samples_mappings
+            &key_and_blocks, parameter, &samples_mappings
         );
 
-        let mut new_shape = first_gradient.values.shape()?.to_vec();
-        new_shape[0] = new_gradient_samples.count();
-        let mut new_gradient = first_block.values.create(&new_shape, fill_value)?;
-        let new_components = first_gradient.components.to_vec();
-
-        for (KeyAndBlock{block, ..}, samples_mapping) in blocks_to_merge.iter().zip(&samples_mappings) {
+        let mut block_movements = Vec::new();
+        for (bp, (_, KeyAndBlock{block, ..})) in block_plans.iter().zip(blocks_to_merge) {
             let gradient = block.gradient(parameter).expect("missing gradient");
-            debug_assert!(*gradient.components == *new_components);
 
-            let mut movements = Vec::new();
-            for (sample_i, grad_sample) in gradient.samples.iter().enumerate() {
-                // translate from the old sample id in gradients to the new ones
+            let movements: Vec<mts_data_movement_t> = gradient.samples.iter().enumerate().map(|(sample_i, grad_sample)| {
                 let mut grad_sample = grad_sample.to_vec();
                 let old_sample_i = usize::try_from(grad_sample[0]).expect("could not convert to usize");
-
-                let new_sample_i = samples_mapping[old_sample_i];
-                grad_sample[0] = i32::try_from(new_sample_i).expect("could not convert to i32");
+                let new_sample_i = bp.samples_mapping[old_sample_i];
+                grad_sample[0] = LabelValue::from(i32::try_from(new_sample_i).expect("could not convert to i32"));
 
                 let new_grad_sample_i = new_gradient_samples.position(&grad_sample).expect("missing entry in merged samples");
 
-                movements.push(mts_data_movement_t {
+                mts_data_movement_t {
                     sample_in: sample_i,
                     sample_out: new_grad_sample_i,
                     properties_start_in: 0,
                     properties_start_out: 0,
                     properties_length: new_properties.count(),
-                });
-            }
+                }
+            }).collect();
 
-            new_gradient.move_data(
-                &gradient.values,
-                &movements,
-            )?;
+            block_movements.push(movements);
         }
 
-        let new_gradient = TensorBlock::new(
-            new_gradient,
-            new_gradient_samples,
-            new_components,
-            new_block.properties.clone()
-        ).expect("created invalid gradient");
-
-        new_block.add_gradient(parameter, new_gradient).expect("could not add gradient");
+        gradient_plans.push(GradientMergePlan {
+            parameter: parameter.clone(),
+            samples: new_gradient_samples,
+            block_movements,
+        });
     }
 
-    return Ok(new_block);
+    Ok(OutputBlockPlan {
+        samples: merged_samples,
+        components: new_components,
+        properties: new_properties,
+        output_shape,
+        block_plans,
+        gradient_plans,
+    })
+}
+
+
+/// Execute a merge plan along samples using array operations.
+fn execute_samples_merge_plan(
+    tensor: &TensorMap,
+    plan: &MergePlan,
+    fill_value: &mts_array_t,
+) -> Result<TensorMap, Error> {
+    let mut new_blocks = Vec::new();
+
+    for output_plan in &plan.output_blocks {
+        let first_block_idx = output_plan.block_plans[0].block_index;
+        let first_block = &tensor.blocks()[first_block_idx];
+
+        let mut new_data = first_block.values.create(&output_plan.output_shape, fill_value)?;
+
+        for bp in &output_plan.block_plans {
+            if !bp.movements.is_empty() {
+                let source_block = &tensor.blocks()[bp.block_index];
+                new_data.move_data(&source_block.values, &bp.movements)?;
+            }
+        }
+
+        let mut new_block = TensorBlock::new(
+            new_data,
+            Arc::clone(&output_plan.samples),
+            output_plan.components.clone(),
+            Arc::clone(&output_plan.properties),
+        ).expect("invalid block");
+
+        for gp in &output_plan.gradient_plans {
+            let first_gradient = first_block.gradient(&gp.parameter).expect("missing gradient");
+            let mut grad_shape = first_gradient.values.shape()?.to_vec();
+            grad_shape[0] = gp.samples.count();
+
+            let mut new_gradient_data = first_block.values.create(&grad_shape, fill_value)?;
+            let new_grad_components = first_gradient.components.to_vec();
+
+            for (bp, movements) in output_plan.block_plans.iter().zip(&gp.block_movements) {
+                if movements.is_empty() {
+                    continue;
+                }
+                let source_block = &tensor.blocks()[bp.block_index];
+                let gradient = source_block.gradient(&gp.parameter).expect("missing gradient");
+                new_gradient_data.move_data(&gradient.values, movements)?;
+            }
+
+            let new_gradient = TensorBlock::new(
+                new_gradient_data,
+                Arc::clone(&gp.samples),
+                new_grad_components,
+                Arc::clone(&output_plan.properties),
+            ).expect("created invalid gradient");
+
+            new_block.add_gradient(&gp.parameter, new_gradient).expect("could not add gradient");
+        }
+
+        new_blocks.push(new_block);
+    }
+
+    let mut result = TensorMap::new(Arc::clone(&plan.new_keys), new_blocks)?;
+    for (k, v) in tensor.info() {
+        result.add_info(k, v.clone());
+    }
+    Ok(result)
 }
