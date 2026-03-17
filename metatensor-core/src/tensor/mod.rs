@@ -8,6 +8,7 @@ use crate::{Labels, Error};
 use crate::get_data_origin;
 
 mod utils;
+pub mod merge_plan;
 
 mod keys_to_samples;
 mod keys_to_properties;
