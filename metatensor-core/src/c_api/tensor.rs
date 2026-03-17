@@ -627,3 +627,288 @@ pub unsafe extern "C" fn mts_tensormap_dtype(
         Ok(())
     })
 }
+
+
+// ============================================================================
+// Merge plan API -- enables JAX traceability by separating metadata
+// computation (Rust) from array operations (Python/Array API)
+// ============================================================================
+
+use crate::tensor::merge_plan::MergePlan;
+
+/// Opaque type representing a merge plan for keys_to_properties or
+/// keys_to_samples operations.
+#[allow(non_camel_case_types)]
+pub struct mts_merge_plan_t(MergePlan);
+
+impl mts_merge_plan_t {
+    pub fn into_boxed_raw(plan: MergePlan) -> *mut mts_merge_plan_t {
+        Box::into_raw(Box::new(mts_merge_plan_t(plan)))
+    }
+
+    pub unsafe fn from_boxed_raw(ptr: *mut mts_merge_plan_t) -> MergePlan {
+        Box::from_raw(ptr).0
+    }
+}
+
+impl std::ops::Deref for mts_merge_plan_t {
+    type Target = MergePlan;
+    fn deref(&self) -> &MergePlan {
+        &self.0
+    }
+}
+
+
+/// Compute a merge plan for `keys_to_properties` without touching arrays.
+///
+/// The returned plan describes how to merge blocks along the property axis.
+/// It can be executed with array-specific code (e.g., JAX Array API).
+///
+/// The plan must be freed with `mts_merge_plan_free`.
+///
+/// @param tensor pointer to an existing tensor map
+/// @param keys_to_move pointer to labels describing the keys to move
+/// @param sort_samples whether to sort the samples lexicographically
+///
+/// @returns A pointer to the merge plan, or NULL on error.
+#[no_mangle]
+pub unsafe extern "C" fn mts_tensormap_keys_to_properties_plan(
+    tensor: *const mts_tensormap_t,
+    keys_to_move: *const mts_labels_t,
+    sort_samples: bool,
+) -> *mut mts_merge_plan_t {
+    let mut result = std::ptr::null_mut();
+    let unwind_wrapper = std::panic::AssertUnwindSafe(&mut result);
+
+    let status = catch_unwind(move || {
+        check_pointers_non_null!(tensor, keys_to_move);
+
+        let keys_to_move = (*keys_to_move).arc_clone();
+        let plan = (*tensor).keys_to_properties_plan(&keys_to_move, sort_samples)?;
+
+        let _ = &unwind_wrapper;
+        *unwind_wrapper.0 = mts_merge_plan_t::into_boxed_raw(plan);
+        Ok(())
+    });
+
+    if !status.is_success() {
+        return std::ptr::null_mut();
+    }
+
+    return result;
+}
+
+
+/// Compute a merge plan for `keys_to_samples` without touching arrays.
+///
+/// The plan must be freed with `mts_merge_plan_free`.
+///
+/// @param tensor pointer to an existing tensor map
+/// @param keys_to_move pointer to labels describing the keys to move
+/// @param sort_samples whether to sort the samples lexicographically
+///
+/// @returns A pointer to the merge plan, or NULL on error.
+#[no_mangle]
+pub unsafe extern "C" fn mts_tensormap_keys_to_samples_plan(
+    tensor: *const mts_tensormap_t,
+    keys_to_move: *const mts_labels_t,
+    sort_samples: bool,
+) -> *mut mts_merge_plan_t {
+    let mut result = std::ptr::null_mut();
+    let unwind_wrapper = std::panic::AssertUnwindSafe(&mut result);
+
+    let status = catch_unwind(move || {
+        check_pointers_non_null!(tensor, keys_to_move);
+
+        let keys_to_move = (*keys_to_move).arc_clone();
+        let plan = (*tensor).keys_to_samples_plan(&keys_to_move, sort_samples)?;
+
+        let _ = &unwind_wrapper;
+        *unwind_wrapper.0 = mts_merge_plan_t::into_boxed_raw(plan);
+        Ok(())
+    });
+
+    if !status.is_success() {
+        return std::ptr::null_mut();
+    }
+
+    return result;
+}
+
+
+/// Get the new keys from a merge plan.
+///
+/// @param plan pointer to a merge plan
+/// @returns pointer to the new keys labels, or NULL on error
+#[no_mangle]
+pub unsafe extern "C" fn mts_merge_plan_new_keys(
+    plan: *const mts_merge_plan_t,
+) -> *mut mts_labels_t {
+    if plan.is_null() {
+        return std::ptr::null_mut();
+    }
+    mts_labels_t::into_raw(Arc::clone(&(&*plan).new_keys))
+}
+
+
+/// Get the number of output blocks in the merge plan.
+///
+/// @param plan pointer to a merge plan
+/// @param count on output, the number of output blocks
+/// @returns status code
+#[no_mangle]
+pub unsafe extern "C" fn mts_merge_plan_block_count(
+    plan: *const mts_merge_plan_t,
+    count: *mut usize,
+) -> mts_status_t {
+    catch_unwind(|| {
+        check_pointers_non_null!(plan, count);
+        *count = (&*plan).output_blocks.len();
+        Ok(())
+    })
+}
+
+
+/// Get the output shape for a specific block in the merge plan.
+///
+/// @param plan pointer to a merge plan
+/// @param block_idx index of the output block
+/// @param shape on output, pointer to the shape array (owned by the plan)
+/// @param shape_count on output, number of dimensions
+/// @returns status code
+#[no_mangle]
+pub unsafe extern "C" fn mts_merge_plan_block_shape(
+    plan: *const mts_merge_plan_t,
+    block_idx: usize,
+    shape: *mut *const usize,
+    shape_count: *mut usize,
+) -> mts_status_t {
+    catch_unwind(|| {
+        check_pointers_non_null!(plan, shape, shape_count);
+        let plan = &*plan;
+        if block_idx >= plan.output_blocks.len() {
+            return Err(Error::InvalidParameter(format!(
+                "block index {} out of range (plan has {} blocks)",
+                block_idx, plan.output_blocks.len()
+            )));
+        }
+        let block_plan = &plan.output_blocks[block_idx];
+        *shape = block_plan.output_shape.as_ptr();
+        *shape_count = block_plan.output_shape.len();
+        Ok(())
+    })
+}
+
+
+/// Get the samples labels for a specific output block in the merge plan.
+///
+/// @param plan pointer to a merge plan
+/// @param block_idx index of the output block
+/// @returns pointer to the labels, or NULL on error
+#[no_mangle]
+pub unsafe extern "C" fn mts_merge_plan_block_samples(
+    plan: *const mts_merge_plan_t,
+    block_idx: usize,
+) -> *mut mts_labels_t {
+    if plan.is_null() || block_idx >= (&*plan).output_blocks.len() {
+        return std::ptr::null_mut();
+    }
+    mts_labels_t::into_raw(Arc::clone(&(&*plan).output_blocks[block_idx].samples))
+}
+
+
+/// Get the properties labels for a specific output block in the merge plan.
+///
+/// @param plan pointer to a merge plan
+/// @param block_idx index of the output block
+/// @returns pointer to the labels, or NULL on error
+#[no_mangle]
+pub unsafe extern "C" fn mts_merge_plan_block_properties(
+    plan: *const mts_merge_plan_t,
+    block_idx: usize,
+) -> *mut mts_labels_t {
+    if plan.is_null() || block_idx >= (&*plan).output_blocks.len() {
+        return std::ptr::null_mut();
+    }
+    mts_labels_t::into_raw(Arc::clone(&(&*plan).output_blocks[block_idx].properties))
+}
+
+
+/// Get the number of input blocks contributing to a specific output block,
+/// and the movement instructions for each.
+///
+/// @param plan pointer to a merge plan
+/// @param block_idx index of the output block
+/// @param input_idx index of the input block within this output block's plan
+/// @param source_block_index on output, the index of the source block in the
+///        original TensorMap
+/// @param movements on output, pointer to the movements array (owned by plan)
+/// @param movements_count on output, number of movements
+/// @returns status code
+#[no_mangle]
+pub unsafe extern "C" fn mts_merge_plan_block_movements(
+    plan: *const mts_merge_plan_t,
+    block_idx: usize,
+    input_idx: usize,
+    source_block_index: *mut usize,
+    movements: *mut *const crate::data::mts_data_movement_t,
+    movements_count: *mut usize,
+) -> mts_status_t {
+    catch_unwind(|| {
+        check_pointers_non_null!(plan, source_block_index, movements, movements_count);
+        let plan = &*plan;
+        if block_idx >= plan.output_blocks.len() {
+            return Err(Error::InvalidParameter("block_idx out of range".into()));
+        }
+        let block_plan = &plan.output_blocks[block_idx];
+        if input_idx >= block_plan.block_plans.len() {
+            return Err(Error::InvalidParameter("input_idx out of range".into()));
+        }
+        let bp = &block_plan.block_plans[input_idx];
+        *source_block_index = bp.block_index;
+        *movements = bp.movements.as_ptr();
+        *movements_count = bp.movements.len();
+        Ok(())
+    })
+}
+
+
+/// Get the number of input blocks for a specific output block.
+///
+/// @param plan pointer to a merge plan
+/// @param block_idx index of the output block
+/// @param count on output, the number of input blocks
+/// @returns status code
+#[no_mangle]
+pub unsafe extern "C" fn mts_merge_plan_block_input_count(
+    plan: *const mts_merge_plan_t,
+    block_idx: usize,
+    count: *mut usize,
+) -> mts_status_t {
+    catch_unwind(|| {
+        check_pointers_non_null!(plan, count);
+        let plan = &*plan;
+        if block_idx >= plan.output_blocks.len() {
+            return Err(Error::InvalidParameter("block_idx out of range".into()));
+        }
+        *count = plan.output_blocks[block_idx].block_plans.len();
+        Ok(())
+    })
+}
+
+
+/// Free a merge plan.
+///
+/// @param plan pointer to a merge plan
+/// @returns status code
+#[no_mangle]
+pub unsafe extern "C" fn mts_merge_plan_free(
+    plan: *mut mts_merge_plan_t,
+) -> mts_status_t {
+    catch_unwind(|| {
+        if !plan.is_null() {
+            let _ = mts_merge_plan_t::from_boxed_raw(plan);
+        }
+        Ok(())
+    })
+}
