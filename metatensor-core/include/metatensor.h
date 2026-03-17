@@ -222,11 +222,14 @@ typedef struct mts_array_t {
    * `new_array`. The number of elements in the `shape` array should be given
    * in `shape_count`.
    *
-   * The new array should be filled with zeros.
+   * The new array should be filled with the scalar value from `fill_value`,
+   * which is a CPU `mts_array_t` with shape `(1,)` and the same dtype as
+   * this array.
    */
   mts_status_t (*create)(const void *array,
                          const uintptr_t *shape,
                          uintptr_t shape_count,
+                         struct mts_array_t fill_value,
                          struct mts_array_t *new_array);
   /**
    * Make a copy of this `array` and return the new array in `new_array`.
@@ -947,6 +950,8 @@ mts_status_t mts_tensormap_blocks_matching(const struct mts_tensormap_t *tensor,
  *
  * @param tensor pointer to an existing tensor map
  * @param keys_to_move pointer to labels describing the keys to move
+ * @param fill_value an mts_array_t with shape (1,) and the same dtype as the
+ *                   data, used to fill missing entries when merging blocks
  * @param sort_samples whether to sort the samples lexicographically after
  *                     merging blocks
  *
@@ -956,6 +961,7 @@ mts_status_t mts_tensormap_blocks_matching(const struct mts_tensormap_t *tensor,
  */
 struct mts_tensormap_t *mts_tensormap_keys_to_properties(const struct mts_tensormap_t *tensor,
                                                          const struct mts_labels_t *keys_to_move,
+                                                         struct mts_array_t fill_value,
                                                          bool sort_samples);
 
 /**
@@ -1000,6 +1006,8 @@ struct mts_tensormap_t *mts_tensormap_components_to_properties(struct mts_tensor
  *
  * @param tensor pointer to an existing tensor map
  * @param keys_to_move pointer to labels describing the keys to move
+ * @param fill_value an mts_array_t with shape (1,) and the same dtype as the
+ *                   data, used to fill missing entries when merging blocks
  * @param sort_samples whether to sort the samples lexicographically after
  *                     merging blocks or not
  *
@@ -1009,6 +1017,7 @@ struct mts_tensormap_t *mts_tensormap_components_to_properties(struct mts_tensor
  */
 struct mts_tensormap_t *mts_tensormap_keys_to_samples(const struct mts_tensormap_t *tensor,
                                                       const struct mts_labels_t *keys_to_move,
+                                                      struct mts_array_t fill_value,
                                                       bool sort_samples);
 
 /**

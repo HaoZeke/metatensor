@@ -250,7 +250,7 @@ class Labels:
     def __init__(
         self,
         names: Union[str, Sequence[str]],
-        values: np.ndarray,
+        values,
         assume_unique: bool = False,
     ):
         """
@@ -259,50 +259,88 @@ class Labels:
                       ``names="a"`` is the same as ``names=["a"]``.
 
         :param values: values of the labels, this needs to be a 2-dimensional
-                       array of integers.
+                       array of integers. Accepted types: ``numpy.ndarray``,
+                       ``torch.Tensor``, or any array supporting ``__dlpack__``
+                       (e.g. ``jax.Array``). Non-numpy arrays are stored via
+                       ``mts_labels_create_from_array`` with CPU values lazily
+                       materialized through DLPack.
 
         :param assume_unique: skip uniqueness checks inside metatensor. This
                               should only be set to ``True`` if you can
                               ensure that label entries are already unique,
                               either by construction or because you checked.
         """
+        from .data.array import create_mts_array, _is_numpy_array
 
         names = _normalize_names_type(names)
 
-        if not isinstance(values, np.ndarray):
-            raise ValueError("`values` must be a numpy ndarray")
+        if isinstance(values, np.ndarray) or _is_numpy_array(values):
+            # Existing numpy path: pass raw i32 pointer to mts_labels_create
+            if len(values) == 0:
+                values = np.empty((0, len(names)), dtype=np.int32)
+            if len(values.shape) != 2:
+                raise ValueError("`values` must be a 2D array")
 
-        if len(values) == 0:
-            # Explicitly define empty labels
-            values = np.empty((0, len(names)), dtype=np.int32)
-        if len(values.shape) != 2:
-            # make sure the array is 2D
-            raise ValueError("`values` must be a 2D array")
-
-        if len(names) != values.shape[1]:
-            raise ValueError(
-                "`names` must have an entry for each column of the `values` array"
-            )
-
-        try:
-            # We need to make sure the data is C-contiguous to take a pointer to
-            # it, and that it has the right type
-            values = np.ascontiguousarray(
-                values.astype(
-                    np.int32,
-                    order="C",
-                    casting="same_kind",
-                    subok=False,
-                    copy=False,
+            if len(names) != values.shape[1]:
+                raise ValueError(
+                    "`names` must have an entry for each column of the "
+                    "`values` array"
                 )
-            )
-        except TypeError as e:
-            raise TypeError("Labels values must be convertible to integers") from e
 
-        self._lib = _get_library()
-        self._labels = _create_new_labels(
-            self._lib, names, values, assume_unique=assume_unique
-        )
+            try:
+                values = np.ascontiguousarray(
+                    values.astype(
+                        np.int32,
+                        order="C",
+                        casting="same_kind",
+                        subok=False,
+                        copy=False,
+                    )
+                )
+            except TypeError as e:
+                raise TypeError(
+                    "Labels values must be convertible to integers"
+                ) from e
+
+            self._lib = _get_library()
+            self._labels = _create_new_labels(
+                self._lib, names, values, assume_unique=assume_unique
+            )
+        else:
+            # Non-numpy path: any array supporting __dlpack__ or the array API.
+            # Uses mts_labels_create_from_array which stores the mts_array_t
+            # as primary storage, with CPU i32 values lazily materialized.
+            if len(values.shape) != 2:
+                raise ValueError("`values` must be a 2D array")
+
+            if len(names) != values.shape[1]:
+                raise ValueError(
+                    "`names` must have an entry for each column of the "
+                    "`values` array"
+                )
+
+            mts_array = create_mts_array(values)
+
+            c_names = ctypes.ARRAY(ctypes.c_char_p, len(names))()
+            for i, n in enumerate(names):
+                c_names[i] = n.encode("utf8")
+
+            labels = mts_labels_t()
+            labels.internal_ptr_ = None
+            labels.names = c_names
+            labels.size = len(names)
+            labels.values = None
+            labels.count = values.shape[0]
+
+            self._lib = _get_library()
+            if assume_unique:
+                self._lib.mts_labels_create_from_array_assume_unique(
+                    labels, mts_array
+                )
+            else:
+                self._lib.mts_labels_create_from_array(labels, mts_array)
+            self._labels = labels
+
         self._names = names
         self._cached_values = None
 
