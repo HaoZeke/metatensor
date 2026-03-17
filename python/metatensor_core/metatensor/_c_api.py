@@ -91,6 +91,10 @@ class mts_tensormap_t(ctypes.Structure):
     pass
 
 
+class mts_merge_plan_t(ctypes.Structure):
+    pass
+
+
 class mts_data_movement_t(ctypes.Structure):
     pass
 
@@ -406,6 +410,74 @@ def setup_functions(lib):
         POINTER(DLDataType),
     ]
     lib.mts_tensormap_dtype.restype = _check_status
+
+    # Merge plan API (for JAX traceability)
+    lib.mts_tensormap_keys_to_properties_plan.argtypes = [
+        POINTER(mts_tensormap_t),
+        POINTER(mts_labels_t),
+        ctypes.c_bool,
+    ]
+    lib.mts_tensormap_keys_to_properties_plan.restype = POINTER(mts_merge_plan_t)
+
+    lib.mts_tensormap_keys_to_samples_plan.argtypes = [
+        POINTER(mts_tensormap_t),
+        POINTER(mts_labels_t),
+        ctypes.c_bool,
+    ]
+    lib.mts_tensormap_keys_to_samples_plan.restype = POINTER(mts_merge_plan_t)
+
+    lib.mts_merge_plan_new_keys.argtypes = [
+        POINTER(mts_merge_plan_t),
+    ]
+    lib.mts_merge_plan_new_keys.restype = POINTER(mts_labels_t)
+
+    lib.mts_merge_plan_block_count.argtypes = [
+        POINTER(mts_merge_plan_t),
+        POINTER(c_uintptr_t),
+    ]
+    lib.mts_merge_plan_block_count.restype = _check_status
+
+    lib.mts_merge_plan_block_shape.argtypes = [
+        POINTER(mts_merge_plan_t),
+        c_uintptr_t,
+        POINTER(POINTER(c_uintptr_t)),
+        POINTER(c_uintptr_t),
+    ]
+    lib.mts_merge_plan_block_shape.restype = _check_status
+
+    lib.mts_merge_plan_block_samples.argtypes = [
+        POINTER(mts_merge_plan_t),
+        c_uintptr_t,
+    ]
+    lib.mts_merge_plan_block_samples.restype = POINTER(mts_labels_t)
+
+    lib.mts_merge_plan_block_properties.argtypes = [
+        POINTER(mts_merge_plan_t),
+        c_uintptr_t,
+    ]
+    lib.mts_merge_plan_block_properties.restype = POINTER(mts_labels_t)
+
+    lib.mts_merge_plan_block_input_count.argtypes = [
+        POINTER(mts_merge_plan_t),
+        c_uintptr_t,
+        POINTER(c_uintptr_t),
+    ]
+    lib.mts_merge_plan_block_input_count.restype = _check_status
+
+    lib.mts_merge_plan_block_movements.argtypes = [
+        POINTER(mts_merge_plan_t),
+        c_uintptr_t,
+        c_uintptr_t,
+        POINTER(c_uintptr_t),
+        POINTER(POINTER(mts_data_movement_t)),
+        POINTER(c_uintptr_t),
+    ]
+    lib.mts_merge_plan_block_movements.restype = _check_status
+
+    lib.mts_merge_plan_free.argtypes = [
+        POINTER(mts_merge_plan_t),
+    ]
+    lib.mts_merge_plan_free.restype = _check_status
 
     lib.mts_labels_load.argtypes = [
         ctypes.c_char_p,
