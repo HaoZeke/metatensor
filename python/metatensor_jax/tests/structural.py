@@ -116,3 +116,72 @@ class TestJAXStructural:
                 np.array(block_jx.values),
                 rtol=1e-10,
             )
+
+
+class TestCustomVJP:
+    """Test custom_vjp gradient support through structural operations."""
+
+    def test_reverse_scatter_basic(self):
+        """Test that _reverse_scatter correctly gathers gradients."""
+        from metatensor_jax._structural import _reverse_scatter
+
+        # Simple 2D case: 3 samples, 4 properties
+        grad_output = jnp.ones((3, 4))
+        movements = [
+            (0, 1, 0, 2, 2),  # input[0, 0:2] -> output[1, 2:4]
+            (1, 0, 0, 0, 2),  # input[1, 0:2] -> output[0, 0:2]
+        ]
+        input_shape = (2, 2)  # 2 samples, 2 properties
+
+        result = _reverse_scatter(jnp, grad_output, input_shape, movements)
+
+        # grad_output[1, 2:4] = [1, 1] -> result[0, 0:2]
+        # grad_output[0, 0:2] = [1, 1] -> result[1, 0:2]
+        np.testing.assert_array_equal(result, jnp.ones((2, 2)))
+
+    def test_merge_values_jax_jit(self):
+        """Test that _merge_values_jax works under jax.jit."""
+        from metatensor_jax._structural import _merge_values_jax
+
+        block1 = jnp.array([[1.0, 2.0], [3.0, 4.0]])
+        block2 = jnp.array([[5.0, 6.0]])
+
+        # Merge: block1 samples -> output[0:2], block2 sample -> output[2]
+        # Properties stay the same (0:2)
+        movements1 = tuple([(0, 0, 0, 0, 2), (1, 1, 0, 0, 2)])
+        movements2 = tuple([(0, 2, 0, 0, 2)])
+
+        result = jax.jit(
+            lambda vals: _merge_values_jax(
+                vals,
+                (3, 2),  # output shape
+                (movements1, movements2),
+                0.0,
+                ((2, 2), (1, 2)),  # input shapes
+            )
+        )((block1, block2))
+
+        expected = jnp.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+        np.testing.assert_array_equal(result, expected)
+
+    def test_merge_values_jax_grad(self):
+        """Test that gradients flow through _merge_values_jax."""
+        from metatensor_jax._structural import _merge_values_jax
+
+        block1 = jnp.array([[1.0, 2.0], [3.0, 4.0]])
+
+        movements1 = tuple([(0, 0, 0, 0, 2), (1, 1, 0, 0, 2)])
+
+        def loss_fn(vals):
+            merged = _merge_values_jax(
+                vals,
+                (2, 2),
+                (movements1,),
+                0.0,
+                ((2, 2),),
+            )
+            return jnp.sum(merged)
+
+        # Gradient of sum should be all ones
+        grads = jax.grad(loss_fn)((block1,))
+        np.testing.assert_array_equal(grads[0], jnp.ones_like(block1))

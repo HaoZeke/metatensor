@@ -235,3 +235,82 @@ def keys_to_samples_jax(
         new_blocks.append(block)
 
     return TensorMap(keys=new_keys, blocks=new_blocks)
+
+
+# ============================================================================
+# custom_vjp wrappers for gradient support
+# ============================================================================
+
+
+def _reverse_scatter(xp, grad_output, input_shape, movements):
+    """
+    Reverse of scatter: gather gradients from output back to input shape.
+
+    For each movement (sample_in, sample_out, prop_start_in, prop_start_out, prop_len),
+    gathers grad_output[sample_out, ..., prop_out:prop_out+len] and places it at
+    grad_input[sample_in, ..., prop_in:prop_in+len].
+    """
+    grad_input = xp.zeros(input_shape, dtype=grad_output.dtype)
+
+    if not movements:
+        return grad_input
+
+    first = movements[0]
+    all_same_props = all(
+        m[2] == first[2] and m[3] == first[3] and m[4] == first[4]
+        for m in movements
+    )
+
+    if all_same_props:
+        prop_start_in = first[2]
+        prop_start_out = first[3]
+        prop_len = first[4]
+        samples_in = [m[0] for m in movements]
+        samples_out = [m[1] for m in movements]
+
+        gathered = grad_output[samples_out, ..., prop_start_out:prop_start_out + prop_len]
+        grad_input = grad_input.at[
+            samples_in, ..., prop_start_in:prop_start_in + prop_len
+        ].add(gathered)
+    else:
+        for sample_in, sample_out, prop_start_in, prop_start_out, prop_len in movements:
+            src = grad_output[sample_out, ..., prop_start_out:prop_start_out + prop_len]
+            grad_input = grad_input.at[
+                sample_in, ..., prop_start_in:prop_start_in + prop_len
+            ].add(src)
+
+    return grad_input
+
+
+@jax.custom_vjp
+def _merge_values_jax(block_values_flat, output_shape, movements_per_block, fill_value, input_shapes):
+    """
+    JAX-differentiable merge on flat arrays.
+
+    block_values_flat: tuple of jax arrays (dynamic leaves)
+    output_shape, movements_per_block, fill_value, input_shapes: static
+    """
+    output, _ = execute_merge_plan(
+        list(block_values_flat), list(output_shape),
+        [list(m) for m in movements_per_block], fill_value
+    )
+    return output
+
+
+def _merge_values_jax_fwd(block_values_flat, output_shape, movements_per_block, fill_value, input_shapes):
+    result = _merge_values_jax(
+        block_values_flat, output_shape, movements_per_block, fill_value, input_shapes
+    )
+    return result, (movements_per_block, input_shapes)
+
+
+def _merge_values_jax_bwd(res, g):
+    movements_per_block, input_shapes = res
+    grad_inputs = []
+    for movements, shape in zip(movements_per_block, input_shapes):
+        grad_input = _reverse_scatter(jnp, g, list(shape), list(movements))
+        grad_inputs.append(grad_input)
+    return tuple(grad_inputs), None, None, None, None
+
+
+_merge_values_jax.defvjp(_merge_values_jax_fwd, _merge_values_jax_bwd)

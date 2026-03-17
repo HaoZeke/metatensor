@@ -537,6 +537,14 @@ class TensorMap:
             The fill_value also applies to gradient blocks. If using NaN,
             gradient arrays for missing entries will also contain NaN.
         """
+        # JAX path: use split plan+execute for traceability
+        if _uses_jax_arrays(self):
+            from metatensor_jax._structural import keys_to_samples_jax
+
+            return keys_to_samples_jax(
+                self, keys_to_move, fill_value=fill_value, sort_samples=sort_samples
+            )
+
         keys_to_move = _normalize_keys_to_move(keys_to_move)
         fv_mts = _make_fill_value_array(self, fill_value)
         ptr = self._lib.mts_tensormap_keys_to_samples(
@@ -614,6 +622,14 @@ class TensorMap:
             The fill_value also applies to gradient blocks. If using NaN,
             gradient arrays for missing entries will also contain NaN.
         """
+        # JAX path: use split plan+execute for traceability
+        if _uses_jax_arrays(self):
+            from metatensor_jax._structural import keys_to_properties_jax
+
+            return keys_to_properties_jax(
+                self, keys_to_move, fill_value=fill_value, sort_samples=sort_samples
+            )
+
         keys_to_move = _normalize_keys_to_move(keys_to_move)
         fv_mts = _make_fill_value_array(self, fill_value)
         ptr = self._lib.mts_tensormap_keys_to_properties(
@@ -790,6 +806,18 @@ def _make_fill_value_array(tensor_map, fill_value):
     # numpy fallback
     fv_array = np.array([fill_value], dtype=values.dtype)
     return data.create_mts_array(fv_array)
+
+
+def _uses_jax_arrays(tensor_map: "TensorMap") -> bool:
+    """Check if this TensorMap's blocks contain JAX arrays."""
+    try:
+        from .data.array import _is_jax_array
+
+        if len(tensor_map) > 0:
+            return _is_jax_array(tensor_map.block_by_id(0).values)
+    except ImportError:
+        pass
+    return False
 
 
 def _normalize_keys_to_move(keys_to_move: Union[str, Sequence[str], Labels]) -> Labels:

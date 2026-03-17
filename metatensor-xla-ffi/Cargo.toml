@@ -1,0 +1,15 @@
+[package]
+name = "metatensor-xla-ffi"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+
+description = "XLA FFI wrappers for metatensor C API functions"
+license = "BSD-3-Clause"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Link against metatensor-core via metatensor-sys (provides C API FFI bindings)
+metatensor-sys = { path = "../rust/metatensor-sys", features = ["static"] }
