@@ -189,6 +189,14 @@ def setup_functions(lib):
     ]
     lib.mts_labels_values.restype = _check_status
 
+    lib.mts_labels_values_raw.argtypes = [
+        POINTER(mts_labels_t),
+        POINTER(POINTER(ctypes.c_int32)),
+        POINTER(c_uintptr_t),
+        POINTER(c_uintptr_t),
+    ]
+    lib.mts_labels_values_raw.restype = _check_status
+
     lib.mts_labels_position.argtypes = [
         POINTER(mts_labels_t),
         POINTER(ctypes.c_int32),
