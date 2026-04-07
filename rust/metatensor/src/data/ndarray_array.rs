@@ -181,13 +181,13 @@ where
             });
         }
         let vendored_version = DLPackVersion::current();
-        let major_mismatch = max_version.major != vendored_version.major;
-        let minor_too_high = max_version.minor < vendored_version.minor;
-        if major_mismatch || minor_too_high {
+        // DLPack is backward-compatible within the same major version.
+        // The producer (us) only needs the consumer's major to match.
+        if max_version.major != vendored_version.major {
             return Err(Error {
                 code: Some(crate::c_api::MTS_INVALID_PARAMETER_ERROR),
                 message: format!(
-                    "Metatensor supports DLPack version {}.{}. Caller requested incompatible version {}.{}",
+                    "Metatensor supports DLPack version {}.{}. Caller requested incompatible major version {}.{}",
                     vendored_version.major, vendored_version.minor, max_version.major, max_version.minor
                 ),
             });
