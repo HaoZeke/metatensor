@@ -407,7 +407,7 @@ Labels LabelsHolder::to(torch::Device device, bool non_blocking) const {
         // (which is still on the pre-Meta device). Get CPU values via
         // DLPack, create a torch tensor, then move to target device.
         auto& rust_labels = this->as_metatensor();
-        auto rust_values = rust_labels.values();
+        const auto rust_values = rust_labels.values();
         auto cpu_tensor = torch::from_blob(
             const_cast<int32_t*>(rust_values.data()),
             {static_cast<int64_t>(rust_values.shape()[0]),
