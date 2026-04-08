@@ -34,7 +34,7 @@ where
         let fill_value_dlpack = fill_value.as_dlpack(cpu_device, None, max_version).expect("failed to extract fill_value as DLPack");
 
         // Validate fill_value shape from the DLPack tensor directly
-        assert_eq!(fill_value_dlpack.shape(), [], "fill_value must have shape (1,)");
+        assert_eq!(fill_value_dlpack.shape(), [], "fill_value must be a scalar (empty shape)");
         assert_eq!(fill_value_dlpack.device(), cpu_device, "fill_value must be on CPU");
 
         let fill_value_ptr = fill_value_dlpack.data_ptr::<T>().expect("dtype mismatch between array and fill_value");
@@ -45,14 +45,20 @@ where
     }
 
     fn copy(&self) -> Box<dyn Array> {
-        return Box::new(self.clone());
+        let lock = match self.try_read() {
+            Ok(lock) => lock,
+            Err(TryLockError::Poisoned(_)) => panic!("array lock is poisoned"),
+            Err(TryLockError::WouldBlock) => panic!("cannot copy: array is already locked by DLPack or another operation"),
+        };
+        let deep_copy = lock.clone();
+        return Box::new(Arc::new(RwLock::new(deep_copy)));
     }
 
     fn shape(&self) -> Vec<usize> {
         match self.try_read() {
             Ok(lock) => lock.shape().to_vec(),
             Err(TryLockError::Poisoned(_)) => panic!("array lock is poisoned"),
-            Err(TryLockError::WouldBlock) => panic!("array is already locked"),
+            Err(TryLockError::WouldBlock) => panic!("array is already locked, possibly by an active DLPack export"),
         }
     }
 
@@ -60,7 +66,7 @@ where
         let mut lock = match self.try_write() {
             Ok(lock) => lock,
             Err(TryLockError::Poisoned(_)) => panic!("array lock is poisoned"),
-            Err(TryLockError::WouldBlock) => panic!("array is already locked"),
+            Err(TryLockError::WouldBlock) => panic!("array is already locked, possibly by an active DLPack export"),
         };
         let array = std::mem::take(&mut *lock);
         let array = array.into_shape_clone(shape).expect("invalid shape");
@@ -71,7 +77,7 @@ where
         let mut lock = match self.try_write() {
             Ok(lock) => lock,
             Err(TryLockError::Poisoned(_)) => panic!("array lock is poisoned"),
-            Err(TryLockError::WouldBlock) => panic!("array is already locked"),
+            Err(TryLockError::WouldBlock) => panic!("array is already locked, possibly by an active DLPack export"),
         };
         lock.swap_axes(axis_1, axis_2);
     }

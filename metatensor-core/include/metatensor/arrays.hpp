@@ -160,7 +160,7 @@ namespace details {
     }
 
     template<typename Lhs, typename Rhs>
-    bool arrays_equal(const Lhs& lhs, Rhs& rhs) {
+    bool arrays_equal(const Lhs& lhs, const Rhs& rhs) {
         if (lhs.shape() != rhs.shape()) {
             return false;
         }
