@@ -236,13 +236,14 @@ typedef struct mts_array_t {
   /**
    * Get the shape of the array managed by this `mts_array_t` in the `*shape`
    * pointer, and the number of dimension (size of the `*shape` array) in
-   * `*shape_count`.
+   * `*shape_count`. If the array is a single scalar, `shape_count` should be
+   * set to 0, and the shape pointer to `NULL`.
    */
   mts_status_t (*shape)(const void *array, const uintptr_t **shape, uintptr_t *shape_count);
   /**
    * Change the shape of the array managed by this `mts_array_t` to the given
    * `shape`. `shape_count` must contain the number of elements in the
-   * `shape` array
+   * `shape` array.
    */
   mts_status_t (*reshape)(void *array, const uintptr_t *shape, uintptr_t shape_count);
   /**
@@ -256,9 +257,10 @@ typedef struct mts_array_t {
    * in `shape_count`.
    *
    * The new array should be filled with the scalar value from `fill_value`,
-   * which must be an `mts_array_t` with shape `(1,)` and the same dtype as
-   * this array. This function should call `fill_value.destroy` if the
-   * function pointer is not null when `fill_value` is no longer needed.
+   * which must be an `mts_array_t` containing a single scalar (empty shape)
+   * with the same dtype as this array. This function should call
+   * `fill_value.destroy` if the function pointer is not `NULL` when
+   * `fill_value` is no longer needed.
    */
   mts_status_t (*create)(const void *array,
                          const uintptr_t *shape,
