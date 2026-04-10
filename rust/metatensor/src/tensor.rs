@@ -2,7 +2,7 @@ use std::ffi::{CStr, CString};
 use std::iter::FusedIterator;
 
 use crate::block::TensorBlockRefMut;
-use crate::c_api::{mts_tensormap_t, mts_labels_t};
+use crate::c_api::{mts_tensormap_t, mts_labels_t, mts_array_t};
 
 use crate::errors::{check_status, check_ptr};
 use crate::{Error, LabelValue, Labels, MtsArray, TensorBlock, TensorBlockRef};
@@ -90,13 +90,9 @@ impl TensorMap {
     pub unsafe fn from_raw(ptr: *mut mts_tensormap_t) -> TensorMap {
         assert!(!ptr.is_null());
 
-        let mut keys = mts_labels_t::null();
-        check_status(crate::c_api::mts_tensormap_keys(
-            ptr,
-            &mut keys
-        )).expect("failed to get the keys");
-
-        let keys = Labels::from_raw(keys);
+        let keys_ptr = crate::c_api::mts_tensormap_keys(ptr);
+        assert!(!keys_ptr.is_null(), "failed to get the keys");
+        let keys = Labels::from_raw(keys_ptr);
 
         return TensorMap {
             ptr,
@@ -803,14 +799,14 @@ mod tests {
         // iterate over keys & blocks
         for (key, block) in &tensor {
             let values = block.values().to_ndarray_lock::<f64>().read().unwrap();
-            assert_eq!(values[[0, 0]], f64::from(key[0].i32()));
+            assert_eq!(values[[0, 0]], f64::from(key[0]));
         }
 
         // iterate over keys & blocks mutably
         for (key, mut block) in &mut tensor {
             let array = block.values_mut().get_ndarray_mut::<f64>();
             *array *= 2.0;
-            assert_eq!(array[[0, 0]], 2.0 * f64::from(key[0].i32()));
+            assert_eq!(array[[0, 0]], 2.0 * f64::from(key[0]));
         }
     }
 
@@ -824,14 +820,14 @@ mod tests {
         // iterate over keys & blocks
         tensor.par_iter().for_each(|(key, block)| {
             let values = block.values().to_ndarray_lock::<f64>().read().unwrap();
-            assert_eq!(values[[0, 0]], f64::from(key[0].i32()));
+            assert_eq!(values[[0, 0]], f64::from(key[0]));
         });
 
         // iterate over keys & blocks mutably
         tensor.par_iter_mut().for_each(|(key, mut block)| {
             let array = block.values_mut().get_ndarray_mut::<f64>();
             *array *= 2.0;
-            assert_eq!(array[[0, 0]], 2.0 * f64::from(key[0].i32()));
+            assert_eq!(array[[0, 0]], 2.0 * f64::from(key[0]));
         });
     }
 

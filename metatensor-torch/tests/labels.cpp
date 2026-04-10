@@ -130,6 +130,39 @@ TEST_CASE("Labels") {
         CHECK(torch::all(std::get<2>(result) == expected).item<bool>());
     }
 
+    SECTION("meta tensor construction") {
+        // Regression test for https://github.com/metatensor/metatensor/issues/1055
+        // torch.func.jvp introduces Meta-device tensors; Labels construction
+        // must not crash when given a Meta tensor.
+        auto values = torch::tensor({{0, 1}, {2, 3}}, torch::kInt32);
+        auto meta_values = values.to(torch::kMeta);
+
+        // assume_unique skips data access for uniqueness checking
+        auto labels = LabelsHolder(
+            std::vector<std::string>{"a", "b"},
+            meta_values,
+            metatensor::assume_unique{}
+        );
+
+        CHECK(labels.count() == 2);
+        CHECK(labels.size() == 2);
+        CHECK(labels.names()[0] == "a");
+        CHECK(labels.names()[1] == "b");
+        // values tensor should be on meta device
+        CHECK(labels.values().device().is_meta());
+    }
+
+    SECTION("meta round-trip") {
+        // x -> meta -> cpu preserves data (Meta is transparent)
+        auto labels = LabelsHolder::create({"x", "y"}, {{1, 2}, {3, 4}});
+        auto meta_labels = labels->to(torch::kMeta);
+        auto back = meta_labels->to(torch::kCPU);
+
+        CHECK(back->count() == 2);
+        auto expected = torch::tensor({{1, 2}, {3, 4}}, torch::kInt32);
+        CHECK(torch::all(back->values() == expected).item<bool>());
+    }
+
     SECTION("Labels keep the values tensor alive") {
         // see https://github.com/metatensor/metatensor/issues/290 for the use case
         auto names = std::vector<std::string>{"a", "b"};

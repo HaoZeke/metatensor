@@ -32,6 +32,10 @@
 
 pub use metatensor_sys as c_api;
 
+/// Re-export dlpk types used in the Array trait, so downstream crates
+/// don't need a direct dlpk dependency.
+pub use dlpk;
+
 pub mod errors;
 pub use self::errors::Error;
 

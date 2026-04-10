@@ -294,7 +294,7 @@ public:
     /// double value = array(2, 3, 1);
     /// ```
     template<typename ...Args>
-    T operator()(Args... args) const & {
+    T operator()(Args... args) const {
         if (managed_ != nullptr && managed_->dl_tensor.device.device_type != kDLCPU) {
             throw Error(
                 "can not index into a DLPackArray on a non-CPU device"
@@ -310,23 +310,16 @@ public:
         return data_[details::linear_index(shape_, index)];
     }
 
-    template<typename ...Args>
-    T operator()(Args... args) && = delete;
-
     /// Get the data pointer for this array, i.e. the pointer to the first
     /// element.
-    const T* data() const & {
+    const T* data() const {
         return data_;
     }
 
-    const T* data() && = delete;
-
     /// Get the shape of this array
-    const std::vector<size_t>& shape() const & {
+    const std::vector<size_t>& shape() const {
         return shape_;
     }
-
-    const std::vector<size_t>& shape() && = delete;
 
     /// Check if this array is empty, i.e. if at least one of the shape element
     /// is 0.
@@ -466,6 +459,12 @@ public:
         return data_[details::linear_index(shape_, index)];
     }
 
+    /// Read-only access on rvalue NDArrays (e.g. `labels.values()(0, 0)`).
+    template<typename ...Args>
+    T operator()(Args... args) const && {
+        return static_cast<const NDArray&>(*this)(args...);
+    }
+
     /// Get a reference to the value inside this `NDArray` at the given index
     ///
     /// ```
@@ -489,12 +488,14 @@ public:
         return data_[details::linear_index(shape_, index)];
     }
 
-    template<typename ...Args>
-    T& operator()(Args... args) && = delete;
-
     /// Get the data pointer for this array, i.e. the pointer to the first
     /// element.
     const T* data() const & {
+        return data_;
+    }
+
+    /// Get the data pointer for rvalue NDArrays.
+    const T* data() const && {
         return data_;
     }
 
@@ -507,14 +508,10 @@ public:
         return data_;
     }
 
-    const T* data() && = delete;
-
     /// Get the shape of this array
-    const std::vector<size_t>& shape() const & {
+    const std::vector<size_t>& shape() const {
         return shape_;
     }
-
-    const std::vector<size_t>& shape() && = delete;
 
     /// Check if this array is empty, i.e. if at least one of the shape element
     /// is 0.
@@ -574,6 +571,19 @@ private:
             auto data_vector = reinterpret_cast<vector_t*>(data);
             delete data_vector;
         };
+        validate();
+    }
+
+    /// Construct an NDArray that owns a DLPack tensor. The data pointer
+    /// comes from the DLTensor; the owned_data is the DLManagedTensorVersioned
+    /// which is freed via its deleter when the NDArray is destroyed.
+    NDArray(const T* data, std::vector<size_t> shape, void* owned, std::function<void(void*)> deleter):
+        data_(const_cast<T*>(data)),
+        shape_(std::move(shape)),
+        is_const_(true),
+        owned_data_(owned),
+        deleter_(std::move(deleter))
+    {
         validate();
     }
 
@@ -858,9 +868,7 @@ public:
     ) const = 0;
 
     /// Get the shape of this array
-    virtual const std::vector<uintptr_t>& shape() const & = 0;
-
-    const std::vector<uintptr_t>& shape() && = delete;
+    virtual const std::vector<uintptr_t>& shape() const = 0;
 
     /// Set the shape of this array to the given `shape`
     virtual void reshape(std::vector<uintptr_t> shape) = 0;
@@ -937,7 +945,7 @@ public:
         return details::dtype_of<T>();
     }
 
-    const std::vector<uintptr_t>& shape() const & override {
+    const std::vector<uintptr_t>& shape() const override {
         return shape_;
     }
 
@@ -1375,7 +1383,7 @@ public:
         throw metatensor::Error("can not call `as_dlpack` for an EmtpyDataArray");
     }
 
-    const std::vector<uintptr_t>& shape() const & override {
+    const std::vector<uintptr_t>& shape() const override {
         return shape_;
     }
 

@@ -415,9 +415,10 @@ configure_package_config_file(
     ${PROJECT_BINARY_DIR}/metatensor-config.cmake
     INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/metatensor
 )
+string(REGEX REPLACE "([0-9]*)\\.([0-9]*)\\.([0-9]*).*" "\\1.\\2.\\3" METATENSOR_CMAKE_VERSION ${METATENSOR_FULL_VERSION})
 write_basic_package_version_file(
     metatensor-config-version.cmake
-    VERSION ${METATENSOR_FULL_VERSION}
+    VERSION ${METATENSOR_CMAKE_VERSION}
     COMPATIBILITY SameMinorVersion
 )
 
