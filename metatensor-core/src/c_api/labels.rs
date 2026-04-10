@@ -83,7 +83,8 @@ pub unsafe extern "C" fn mts_labels_create(
 
     let status = catch_unwind(move || {
         let names = create_labels_names_from_raw(names, names_count)?;
-        let labels = Labels::from_array(&names, array)?;
+        let name_refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+        let labels = Labels::from_array(&name_refs, array)?;
 
         let _ = &unwind_wrapper;
         *unwind_wrapper.0 = mts_labels_t::into_raw(Arc::new(labels));
@@ -128,7 +129,8 @@ pub unsafe extern "C" fn mts_labels_create_assume_unique(
 
     let status = catch_unwind(move || {
         let names = create_labels_names_from_raw(names, names_count)?;
-        let labels = Labels::from_array_assume_unique(&names, array)?;
+        let name_refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+        let labels = Labels::from_array_assume_unique(&name_refs, array)?;
 
         let _ = &unwind_wrapper;
         *unwind_wrapper.0 = mts_labels_t::into_raw(Arc::new(labels));
@@ -250,11 +252,14 @@ pub unsafe extern "C" fn mts_labels_position(
 
 
 
-/// Internal helper to create Labels from names array and mts_array_t
+/// Internal helper to extract and validate label names from a raw C array.
+///
+/// Returns owned `String`s to avoid unsound lifetime claims on C-provided
+/// pointers (the caller's strings may be freed after the C function returns).
 unsafe fn create_labels_names_from_raw(
     names_ptr: *const *const c_char,
     names_count: usize,
-) -> Result<Vec<&'static str>, Error> {
+) -> Result<Vec<String>, Error> {
     if names_count == 0 {
         return Ok(Vec::new());
     }
@@ -274,7 +279,7 @@ unsafe fn create_labels_names_from_raw(
                 "'{}' is not a valid label name", name
             )));
         }
-        names.push(name);
+        names.push(name.to_owned());
     }
 
     Ok(names)

@@ -61,13 +61,18 @@ impl mts_block_t {
 /// @param data array handle containing the data for this block. The block takes
 ///             ownership of the array, and will release it with
 ///             `array.destroy(array.ptr)` when it no longer needs it.
-/// @param samples pointer to sample labels. The block takes ownership of
-///                these labels.
-/// @param components array of pointers to component labels. The block takes
-///                   ownership of these labels.
+/// @param samples pointer to sample labels. The block keeps an internal shared
+///                reference to these labels; the caller retains ownership and
+///                remains responsible for eventually calling `mts_labels_free`.
+/// @param components array of pointers to component labels. The block keeps
+///                   internal shared references to these labels; the caller
+///                   retains ownership and remains responsible for eventually
+///                   calling `mts_labels_free`.
 /// @param components_count number of entries in the `components` array
-/// @param properties pointer to property labels. The block takes ownership
-///                   of these labels.
+/// @param properties pointer to property labels. The block keeps an internal
+///                   shared reference to these labels; the caller retains
+///                   ownership and remains responsible for eventually calling
+///                   `mts_labels_free`.
 ///
 /// @returns A pointer to the newly allocated block, or a `NULL` pointer in
 ///          case of error. In case of error, you can use `mts_last_error()`

@@ -20,6 +20,7 @@ from .array import (
     _origin_pytorch,
     _register_origin,
 )
+from ._dlpack import DLPackArray
 
 
 class DLPackDtypeCode(enum.IntEnum):
@@ -220,15 +221,15 @@ class ExternalCpuArray(np.ndarray):
         # keep a reference to the parent object (if any) to prevent it from
         # being garbage-collected too early.
         obj._parent = parent
-        # prevent the DLPack tensor from being freed while we hold a view
-        obj._dl_managed_ptr = dl_managed_ptr
+        # Keep the DLPack-managed tensor alive and ensure its deleter runs.
+        obj._dlpack_owner = DLPackArray(dl_managed_ptr)
 
         return obj
 
     def __array_finalize__(self, obj):
         # keep the parent around when creating sub-views of this array
         self._parent = getattr(obj, "_parent", None)
-        self._dl_managed_ptr = getattr(obj, "_dl_managed_ptr", None)
+        self._dlpack_owner = getattr(obj, "_dlpack_owner", None)
 
     def __array_wrap__(self, new, context=None, return_scalar=False):
         self_ptr = self.ctypes.data

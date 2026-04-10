@@ -57,7 +57,9 @@ pub struct Labels {
     /// Names of the labels, stored as const C strings for easier integration
     /// with the C API
     names: Vec<ConstCString>,
-    /// Number of entries (rows). Set once at construction from array shape.
+    /// Number of entries (rows). Cached at construction from the array shape
+    /// to avoid repeated FFI calls through the mts_array_t vtable (count()
+    /// is called frequently in set operations, position lookups, etc.).
     count: usize,
     /// Always-present backing array (primary data source).
     array: mts_array_t,

@@ -31,6 +31,7 @@ class LabelsValues(np.ndarray):
             DLPackVersion,
             c_uintptr_t,
         )
+        from .data._dlpack import DLPackArray
         from .data.extract import _DLPACK_TO_NUMPY, _ptr_to_ndarray
 
         lib = _get_library()
@@ -38,15 +39,6 @@ class LabelsValues(np.ndarray):
         # Get the values array from the labels
         array = mts_array_t()
         _check_status(lib.mts_labels_values(labels._labels, ctypes.byref(array)))
-
-        # Extract shape
-        shape_ptr = ctypes.POINTER(c_uintptr_t)()
-        shape_count = c_uintptr_t()
-        _check_status(array.shape(array.ptr, shape_ptr, shape_count))
-
-        shape = []
-        for i in range(shape_count.value):
-            shape.append(shape_ptr[i])
 
         # Use as_dlpack to get data pointer and dtype (matching ExternalCpuArray)
         dl_managed_ptr = ctypes.POINTER(DLManagedTensorVersioned)()
@@ -62,7 +54,16 @@ class LabelsValues(np.ndarray):
             )
         )
 
-        # Extract dtype and create numpy array (matching ExternalCpuArray)
+        # Extract shape
+        shape_ptr = ctypes.POINTER(c_uintptr_t)()
+        shape_count = c_uintptr_t()
+        _check_status(array.shape(array.ptr, shape_ptr, shape_count))
+
+        shape = []
+        for i in range(shape_count.value):
+            shape.append(shape_ptr[i])
+
+        # Extract dtype and create numpy array
         dl_tensor = dl_managed_ptr.contents.dl_tensor
         data_ptr = dl_tensor.data
         dtype_code = dl_tensor.dtype.code
@@ -84,16 +85,16 @@ class LabelsValues(np.ndarray):
         # Create the LabelsValues view
         obj = np_array.view(cls)
         obj._parent = labels
-        # Keep DLPack tensor alive to prevent premature free
-        obj._dl_managed_ptr = dl_managed_ptr
+        # Keep the DLPack-managed tensor alive and ensure its deleter runs.
+        obj._dlpack_owner = DLPackArray(dl_managed_ptr)
         # Ensure the array is read-only since labels values should not be modified
         obj.flags.writeable = False
         return obj
 
     def __array_finalize__(self, obj):
-        # keep the parent and DLPack handle around when creating sub-views
+        # keep the parent and DLPack owner around when creating sub-views
         self._parent = getattr(obj, "_parent", None)
-        self._dl_managed_ptr = getattr(obj, "_dl_managed_ptr", None)
+        self._dlpack_owner = getattr(obj, "_dlpack_owner", None)
 
     def __array_wrap__(self, new, context=None, return_scalar=False):
         self_ptr = self.ctypes.data

@@ -228,8 +228,9 @@ public:
 
     /// Get the array of values for these Labels as a CPU NDArray.
     ///
-    /// The returned NDArray owns a DLPack tensor that keeps the data alive.
-    /// The data is valid as long as the NDArray (or a copy of it) exists.
+    /// The output data will be on CPU, regardless of the device of the
+    /// inputs. The returned NDArray owns a DLPack tensor that keeps the
+    /// data alive, and is valid as long as the NDArray (or a copy) exists.
     NDArray<int32_t> values() const {
         if (labels_ == nullptr) {
             return NDArray<int32_t>(static_cast<const int32_t*>(nullptr), {0, 0});

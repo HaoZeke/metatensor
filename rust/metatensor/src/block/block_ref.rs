@@ -140,7 +140,7 @@ impl<'a> TensorBlockRef<'a> {
             crate::c_api::mts_block_labels(self.as_ptr(), dimension)
         };
         let ptr = crate::errors::check_ptr(ptr)
-            .expect("failed to get labels");
+            .unwrap_or_else(|e| panic!("failed to get labels: {e}"));
         unsafe { Labels::from_raw(ptr.as_ptr()) }
     }
 

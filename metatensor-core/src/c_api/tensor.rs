@@ -50,14 +50,18 @@ impl std::ops::DerefMut for mts_tensormap_t {
 /// Create a new `mts_tensormap_t` with the given `keys` and `blocks`.
 /// `blocks_count` must be set to the number of entries in the blocks array.
 ///
-/// The new tensor map takes ownership of the blocks and keys, which should
-/// not be released separately.
+/// The new tensor map takes ownership of the blocks, which should not be
+/// released separately. The tensor map keeps an internal shared reference to
+/// `keys`; the caller retains ownership of `keys` and remains responsible for
+/// eventually calling `mts_labels_free`.
 ///
 /// The memory allocated by this function and the blocks should be released
 /// using `mts_tensormap_free`.
 ///
 /// @param keys pointer to labels containing the keys associated with each
-///             block. The tensor map takes ownership of the keys.
+///             block. The tensor map keeps an internal shared reference to
+///             these labels; the caller retains ownership and remains
+///             responsible for eventually calling `mts_labels_free`.
 /// @param blocks pointer to the first element of an array of blocks. The
 ///               tensor map takes ownership of the blocks.
 /// @param blocks_count number of elements in the `blocks` array
