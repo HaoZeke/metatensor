@@ -15,6 +15,9 @@ pub use self::tensor::load;
 pub use self::tensor::save;
 pub use self::tensor::looks_like_tensormap_data;
 
+mod mmap;
+pub use self::mmap::{load_mmap, load_block_mmap};
+
 
 use crate::Error;
 
