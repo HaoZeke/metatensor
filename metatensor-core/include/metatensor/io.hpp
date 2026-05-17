@@ -139,6 +139,23 @@ namespace io {
         return TensorMap(ptr);
     }
 
+    /// Load a `TensorMap` from `path` using memory-mapped I/O.
+    ///
+    /// metatensor parses each NPY header from the mmap-backed file and
+    /// dispatches the resulting `(shape, dtype, file_offset)` to
+    /// `create_array`. The callback decides how to materialise the array
+    /// (mmap view, copy, GPU upload via cuFile, ...). `user_data` is
+    /// forwarded to every callback invocation.
+    inline TensorMap load_mmap(
+        const std::string& path,
+        mts_create_file_array_callback_t create_array,
+        void* user_data
+    ) {
+        auto* ptr = mts_tensormap_load_mmap(path.c_str(), create_array, user_data);
+        details::check_pointer(ptr);
+        return TensorMap(ptr);
+    }
+
     inline TensorMap load_buffer(
         const uint8_t* buffer,
         size_t buffer_count,
@@ -173,6 +190,18 @@ namespace io {
         mts_create_array_callback_t create_array
     ) {
         auto* ptr = mts_block_load(path.c_str(), create_array);
+        details::check_pointer(ptr);
+        return TensorBlock(ptr);
+    }
+
+    /// Load a `TensorBlock` from `path` using memory-mapped I/O. See
+    /// `load_mmap` for callback semantics.
+    inline TensorBlock load_block_mmap(
+        const std::string& path,
+        mts_create_file_array_callback_t create_array,
+        void* user_data
+    ) {
+        auto* ptr = mts_block_load_mmap(path.c_str(), create_array, user_data);
         details::check_pointer(ptr);
         return TensorBlock(ptr);
     }
