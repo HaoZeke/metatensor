@@ -473,7 +473,10 @@ def test_save(use_numpy, memory_buffer, standalone_fn, tmpdir, tensor):
             size = os.path.getsize(file)
 
         assert size == 8718
-        data = np.load(file)
+        # metatensor stores Labels as structured/object arrays inside the
+        # .npz; numpy 2.x flipped allow_pickle's default to False, so
+        # opt in explicitly for these tests-of-our-own-format checks.
+        data = np.load(file, allow_pickle=True)
 
     assert len(data.keys()) == 29
 
@@ -759,7 +762,10 @@ def test_save_labels(memory_buffer, standalone_fn, tmpdir, labels):
             else:
                 labels.save(file)
 
-        data = np.load(file)
+        # metatensor stores Labels as structured/object arrays inside the
+        # .npz; numpy 2.x flipped allow_pickle's default to False, so
+        # opt in explicitly for these tests-of-our-own-format checks.
+        data = np.load(file, allow_pickle=True)
 
     assert _mts_labels(data) == labels
 
@@ -893,7 +899,10 @@ def test_save_block(use_numpy, memory_buffer, standalone_fn, tmpdir, block):
             else:
                 block.save(file, use_numpy=use_numpy)
 
-        data = np.load(file)
+        # metatensor stores Labels as structured/object arrays inside the
+        # .npz; numpy 2.x flipped allow_pickle's default to False, so
+        # opt in explicitly for these tests-of-our-own-format checks.
+        data = np.load(file, allow_pickle=True)
 
     assert len(data.keys()) == 7
 
