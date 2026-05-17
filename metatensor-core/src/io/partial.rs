@@ -1238,4 +1238,68 @@ mod tests {
             "select-all partial_mmap should pass one coalesced region per array, got {region_counts:?}"
         );
     }
+
+    #[test]
+    fn partial_mmap_rejects_sample_labels_past_value_rows() {
+        use std::io::Write;
+
+        fn write_f64_npy(writer: &mut impl Write, shape: &[usize], values: &[f64]) {
+            let shape_text = if shape.len() == 1 {
+                format!("({},)", shape[0])
+            } else {
+                let dims = shape.iter().map(usize::to_string).collect::<Vec<_>>();
+                format!("({})", dims.join(", "))
+            };
+            let mut header = format!(
+                "{{'descr': '{}f8', 'fortran_order': False, 'shape': {}, }}",
+                crate::io::native_endian_prefix(),
+                shape_text
+            );
+            let padding = (16 - ((10 + header.len() + 1) % 16)) % 16;
+            header.extend(std::iter::repeat(' ').take(padding));
+            header.push('\n');
+
+            writer.write_all(b"\x93NUMPY").unwrap();
+            writer.write_all(&[1, 0]).unwrap();
+            writer
+                .write_all(&(header.len() as u16).to_le_bytes())
+                .unwrap();
+            writer.write_all(header.as_bytes()).unwrap();
+            for &value in values {
+                writer.write_all(&value.to_ne_bytes()).unwrap();
+            }
+        }
+
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let file = std::fs::File::create(tmp.path()).unwrap();
+        let mut archive = zip::ZipWriter::new(file);
+        let options =
+            zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+
+        archive.start_file("samples.npy", options).unwrap();
+        crate::io::save_labels(
+            &mut archive,
+            &Labels::from_vec(&["sample"], vec![0, 1]).unwrap(),
+        )
+        .unwrap();
+        archive.start_file("values.npy", options).unwrap();
+        write_f64_npy(&mut archive, &[1, 1], &[42.0]);
+        archive.start_file("properties.npy", options).unwrap();
+        crate::io::save_labels(
+            &mut archive,
+            &Labels::from_vec(&["property"], vec![0]).unwrap(),
+        )
+        .unwrap();
+        archive.finish().unwrap();
+
+        let err = load_block_partial_mmap(tmp.path().to_str().unwrap(), None, |shape, _dtype, _regions| {
+            Ok(crate::data::TestArray::new(shape))
+        })
+        .expect_err("partial mmap should reject labels that exceed value rows");
+
+        assert!(
+            err.to_string().contains("sample index 1 is out of bounds"),
+            "unexpected error: {err}"
+        );
+    }
 }
