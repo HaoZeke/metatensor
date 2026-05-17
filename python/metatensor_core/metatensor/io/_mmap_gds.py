@@ -185,10 +185,12 @@ def _make_gds_partial_callback(cufile_handle):
     @catch_exceptions
     def callback(
         _user_data,
-        shape_ptr, shape_count,
+        shape_ptr,
+        shape_count,
         dtype,
         region_count,
-        offsets_ptr, lens_ptr,
+        offsets_ptr,
+        lens_ptr,
         array_out,
     ):
         shape_list = [int(shape_ptr[i]) for i in range(shape_count)]
