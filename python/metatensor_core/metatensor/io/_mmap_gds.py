@@ -41,11 +41,12 @@ import ctypes
 import pathlib
 from typing import Optional, Union
 
+
 try:
     import cupy as _cp
     import kvikio as _kvikio
-    from kvikio.defaults import is_compat_mode_preferred as _is_compat
     import torch as _torch  # used for DLPack interop to register the GPU array
+    from kvikio.defaults import is_compat_mode_preferred as _is_compat
 except ImportError as err:  # pragma: no cover
     raise ImportError(
         "metatensor.io._mmap_gds requires cupy + kvikio + torch (cuda). "
