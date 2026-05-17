@@ -4,12 +4,12 @@ This document covers two related, optional loading paths in
 metatensor-core that live on top of the
 `mts_create_file_array_callback_t` surface introduced for `load_mmap`.
 
-## 1. mmap-backed partial loading (multi-region callback, planned)
+## 1. mmap-backed partial loading (multi-region callback)
 
-The current `mts_tensormap_load_partial` always materialises owned
+`mts_tensormap_load_partial` materialises owned
 arrays via the standard `mts_create_array_callback_t`. For applications
 that want zero-copy partial loads (e.g. select 10% of samples, keep all
-properties, never copy the underlying bytes), the design is:
+properties, never copy the underlying bytes), the multi-region callback is:
 
 ```c
 typedef mts_status_t (*mts_create_partial_file_array_callback_t)(
@@ -27,24 +27,25 @@ typedef mts_status_t (*mts_create_partial_file_array_callback_t)(
 The callback receives `region_count` contiguous byte runs in the file;
 it constructs an `mts_array_t` whose data is the logical concatenation
 of those regions. For full-row selection, `region_count` is the number
-of kept sample rows; for `select_all` selection on every dimension, it
-degenerates to `region_count = 1` and the callback is equivalent to the
-single-region `mts_create_file_array_callback_t`.
+of coalesced byte runs. Contiguous selected rows are merged, so
+`select_all` selection on every dimension degenerates to `region_count = 1`
+and the callback is equivalent to the single-region
+`mts_create_file_array_callback_t`.
 
-The new entry point would be
-`mts_tensormap_load_partial_mmap(path, keys, samples, properties,
-create_array, user_data)`. The "list of regions" shape mirrors
+The entry point is
+`mts_tensormap_load_partial_mmap(path, keys, samples, create_array,
+user_data)`. The "list of regions" shape mirrors
 `mts_data_movement_t` (see `metatensor-core/src/data.rs`) so users
 familiar with the move-data API will recognise it.
 
-**Status**: design-only in this branch; no implementation yet. The
-single-region `mts_create_file_array_callback_t` from PR #1124 is the
-only callback shipped today; full-tensor mmap views (`load_mmap`) and
-copy-based partial loads (`load_partial`) cover the most common cases.
+Property filtering stays on `load_partial`: selecting individual
+properties produces many tiny regions and is a poor fit for mmap/GDS
+callbacks. Use `load_partial_mmap` for key and sample selection, and
+`load_partial` when property selection is required.
 
-## 2. GPU Direct Storage prototype
+## 2. GPU Direct Storage loader
 
-The Python module `metatensor.io._mmap_gds` demonstrates that the same
+The Python module `metatensor.io._mmap_gds` uses the same
 `mts_create_file_array_callback_t` is sufficient to host a path that
 loads arrays directly to GPU memory through NVIDIA cuFile (via the
 `kvikio` package). The C API does **not** change; the callback uses
@@ -73,10 +74,10 @@ tensor = load_mmap_gds("path/to/data.mts")
 
 - File must use the `STORED` ZIP format that `mts_*_save` writes.
 - Numeric arrays must use native byte order.
-- The prototype opens one cuFile handle per `load_mmap_gds` call; the
+- The loader opens one cuFile handle per load call; the
   handle is kept alive by the callback closure for the duration of the
   load.
 - Not exercised in default CI; depends on system cuFile + cupy +
   kvikio. The CI smoke test in
-  `python/metatensor_core/tests/serialization.py::test_load_mmap_gds_smoke`
+  `python/metatensor_core/tests/serialization.py::test_load_mmap_gds_values_equal`
   is `importorskip`'d when those packages are missing.

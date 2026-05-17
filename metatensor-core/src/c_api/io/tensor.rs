@@ -410,10 +410,6 @@ pub(super) fn wrap_create_partial_file_array(
     user_data: *mut c_void,
 ) -> impl Fn(Vec<usize>, DLDataType, Vec<(usize, usize)>) -> Result<mts_array_t, Error> {
     let user_data = user_data as usize;
-    // Audit #16: reuse the offsets/lens scratch Vecs across all callback
-    // invocations on this load. Without this, every value array (one per
-    // block + gradient) would allocate two fresh Vecs to split the
-    // (offset, len) tuples into the C ABI's SoA shape.
     let offsets_scratch = std::cell::RefCell::new(Vec::<usize>::new());
     let lens_scratch = std::cell::RefCell::new(Vec::<usize>::new());
     move |shape: Vec<usize>, dtype, regions: Vec<(usize, usize)>| {

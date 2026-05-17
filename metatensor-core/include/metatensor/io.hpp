@@ -156,6 +156,22 @@ namespace io {
         return TensorMap(ptr);
     }
 
+    /// Load a `TensorMap` from `path`, selecting blocks (`keys`) and rows
+    /// (`samples`) with a callback that receives coalesced byte regions.
+    inline TensorMap load_partial_mmap(
+        const std::string& path,
+        const mts_labels_t* keys,
+        const mts_labels_t* samples,
+        mts_create_partial_file_array_callback_t create_array,
+        void* user_data
+    ) {
+        auto* ptr = mts_tensormap_load_partial_mmap(
+            path.c_str(), keys, samples, create_array, user_data
+        );
+        details::check_pointer(ptr);
+        return TensorMap(ptr);
+    }
+
     /// Load a `TensorMap` from `path` using memory-mapped I/O.
     ///
     /// metatensor parses each NPY header from the mmap-backed file and
@@ -221,6 +237,19 @@ namespace io {
         mts_create_array_callback_t create_array
     ) {
         auto* ptr = mts_block_load_partial(path.c_str(), samples, properties, create_array);
+        details::check_pointer(ptr);
+        return TensorBlock(ptr);
+    }
+
+    /// Load a `TensorBlock` from `path`, selecting samples with a callback
+    /// that receives coalesced byte regions.
+    inline TensorBlock load_block_partial_mmap(
+        const std::string& path,
+        const mts_labels_t* samples,
+        mts_create_partial_file_array_callback_t create_array,
+        void* user_data
+    ) {
+        auto* ptr = mts_block_load_partial_mmap(path.c_str(), samples, create_array, user_data);
         details::check_pointer(ptr);
         return TensorBlock(ptr);
     }

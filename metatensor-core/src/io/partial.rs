@@ -307,15 +307,7 @@ where
     }
     output_shape.push(src_n_props);
 
-    // Audit #11: regions is intentionally a Vec, not SmallVec. The
-    // callback's signature takes Vec by value; switching to SmallVec
-    // would ripple through the trait bound and the C wrapper. The
-    // per-call cost is amortised at the C-wrapper level by the scratch
-    // Vec reuse from audit #16.
-    let regions: Vec<(usize, usize)> = sample_indices
-        .iter()
-        .map(|&old_row| (raw_data_offset + old_row * row_bytes, row_bytes))
-        .collect();
+    let regions = coalesced_row_regions(raw_data_offset, row_bytes, &sample_indices);
 
     let data = create_array(output_shape, dtype, regions)?;
 
@@ -353,11 +345,6 @@ fn read_partial_mmap_gradient<F>(
 where
     F: Fn(Vec<usize>, DLDataType, Vec<(usize, usize)>) -> Result<mts_array_t, Error>,
 {
-    let mut parent_map: HashMap<i32, i32> = HashMap::new();
-    for (new_idx, &old_idx) in parent_sample_indices.iter().enumerate() {
-        parent_map.insert(old_idx as i32, new_idx as i32);
-    }
-
     let samples_path = format!("{}samples.npy", prefix);
     let samples_file = archive.by_name(&samples_path).map_err(|e| (samples_path, e))?;
     let grad_samples = load_labels(samples_file)?;
@@ -378,14 +365,26 @@ where
     }
     output_shape.push(src_n_props);
 
-    let regions: Vec<(usize, usize)> = kept_grad_indices
-        .iter()
-        .map(|&old_row| (raw_data_offset + old_row * row_bytes, row_bytes))
-        .collect();
+    let regions = coalesced_row_regions(raw_data_offset, row_bytes, &kept_grad_indices);
 
     let data = create_array(output_shape, dtype, regions)?;
 
-    TensorBlock::new(data, new_grad_samples, components, new_properties.clone())
+    let mut gradient = TensorBlock::new(data, new_grad_samples, components, new_properties.clone())?;
+
+    for parameter in &super::discover_gradient_parameters(archive, prefix) {
+        let grad_prefix = format!("{}gradients/{}/", prefix, parameter);
+        let nested_gradient = read_partial_mmap_gradient(
+            archive,
+            mmap,
+            &grad_prefix,
+            &kept_grad_indices,
+            new_properties,
+            create_array,
+        )?;
+        gradient.add_gradient(parameter, nested_gradient)?;
+    }
+
+    Ok(gradient)
 }
 
 
@@ -1057,6 +1056,7 @@ where
 #[cfg(test)]
 mod tests {
     use std::os::raw::c_void;
+    use std::sync::{Arc, Mutex};
 
     use dlpk::sys::{
         DLDataType, DLDataTypeCode, DLManagedTensorVersioned, DLTensor, DLPackVersion,
@@ -1215,5 +1215,27 @@ mod tests {
         let mmap = unsafe { Mmap::map(&file) }.unwrap();
 
         advise_random_access(&file, &mmap).unwrap();
+    }
+
+    #[test]
+    fn partial_mmap_coalesces_select_all_rows() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data.mts");
+        let region_counts = Arc::new(Mutex::new(Vec::new()));
+        let callback_counts = Arc::clone(&region_counts);
+
+        let tensor = load_partial_mmap(path, None, None, move |shape, _dtype, regions| {
+            assert!(!regions.is_empty());
+            callback_counts.lock().unwrap().push(regions.len());
+            Ok(crate::data::TestArray::new(shape))
+        })
+        .unwrap();
+
+        assert_eq!(tensor.keys().count(), 27);
+        let region_counts = region_counts.lock().unwrap();
+        assert!(!region_counts.is_empty());
+        assert!(
+            region_counts.iter().all(|&count| count == 1),
+            "select-all partial_mmap should pass one coalesced region per array, got {region_counts:?}"
+        );
     }
 }

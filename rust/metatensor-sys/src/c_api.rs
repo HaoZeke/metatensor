@@ -273,6 +273,18 @@ pub type mts_create_array_callback_t = ::std::option::Option<
         array: *mut mts_array_t,
     ) -> mts_status_t,
 >;
+pub type mts_create_partial_file_array_callback_t = ::std::option::Option<
+    unsafe extern "C" fn(
+        user_data: *mut ::std::os::raw::c_void,
+        shape: *const usize,
+        shape_count: usize,
+        dtype: DLDataType,
+        region_count: usize,
+        file_offsets: *const usize,
+        region_lens: *const usize,
+        array: *mut mts_array_t,
+    ) -> mts_status_t,
+>;
 pub type mts_create_file_array_callback_t = ::std::option::Option<
     unsafe extern "C" fn(
         user_data: *mut ::std::os::raw::c_void,
@@ -507,6 +519,12 @@ extern "C" {
         properties: *const mts_labels_t,
         create_array: mts_create_array_callback_t,
     ) -> *mut mts_block_t;
+    pub fn mts_block_load_partial_mmap(
+        path: *const ::std::os::raw::c_char,
+        samples: *const mts_labels_t,
+        create_array: mts_create_partial_file_array_callback_t,
+        user_data: *mut ::std::os::raw::c_void,
+    ) -> *mut mts_block_t;
     pub fn mts_block_load_mmap(
         path: *const ::std::os::raw::c_char,
         create_array: mts_create_file_array_callback_t,
@@ -545,6 +563,13 @@ extern "C" {
         samples: *const mts_labels_t,
         properties: *const mts_labels_t,
         create_array: mts_create_array_callback_t,
+    ) -> *mut mts_tensormap_t;
+    pub fn mts_tensormap_load_partial_mmap(
+        path: *const ::std::os::raw::c_char,
+        keys: *const mts_labels_t,
+        samples: *const mts_labels_t,
+        create_array: mts_create_partial_file_array_callback_t,
+        user_data: *mut ::std::os::raw::c_void,
     ) -> *mut mts_tensormap_t;
     #[must_use]
     pub fn mts_tensormap_save(

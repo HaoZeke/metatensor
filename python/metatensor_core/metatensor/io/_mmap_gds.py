@@ -1,11 +1,9 @@
 """
 NVIDIA GPU Direct Storage (GDS) loader.
 
-Uses the same ``mts_create_file_array_callback_t`` introduced in PR
-#1124: metatensor parses the NPY header for every array via mmap and
-hands ``(shape, dtype, file_offset)`` to this callback. The callback
-issues a cuFile ``pread`` (via ``kvikio``) into a pre-allocated CuPy
-GPU array.
+metatensor parses the NPY header for every array via mmap and hands
+``(shape, dtype, file_offset)`` to a file-array callback. The callback issues
+a cuFile ``pread`` (via ``kvikio``) into a pre-allocated CuPy GPU array.
 
 cuFile dispatches between two paths automatically:
 
@@ -62,21 +60,20 @@ from .._c_api import (
     mts_create_partial_file_array_callback_t,
     mts_labels_t,
 )
+from .._c_lib import _get_library
+from .._data._array import create_mts_array
 from .._labels import Labels
+from .._status import catch_exceptions
+from .._tensor import TensorMap
 
 
 @contextlib.contextmanager
 def _cufile_open(path: str):
-    """Audit #20: open + close a kvikio CuFile handle as a context manager."""
     cf = _kvikio.CuFile(path, "r")
     try:
         yield cf
     finally:
         cf.close()
-from .._c_lib import _get_library
-from .._data._array import create_mts_array
-from .._status import catch_exceptions
-from .._tensor import TensorMap
 
 
 _DLPACK_TO_CUPY = {
@@ -199,9 +196,6 @@ def _make_gds_partial_callback(cufile_handle):
         gpu_buf = _cp.empty(shape_list, dtype=cp_dtype)
         flat = gpu_buf.view().reshape(-1)
         elem_bytes = flat.dtype.itemsize
-        # Audit #10 + #18: submit all preads concurrently as futures and
-        # batch the .get() at the end. Indexing in elements only --
-        # cleaner than the previous bytes-then-divide arithmetic.
         futures = []
         written_elems = 0
         for r in range(region_count):
@@ -209,9 +203,15 @@ def _make_gds_partial_callback(cufile_handle):
             n_bytes = int(lens_ptr[r])
             if n_bytes == 0:
                 continue
+            if n_bytes % elem_bytes != 0:
+                raise ValueError(
+                    f"region length {n_bytes} is not a multiple of dtype size {elem_bytes}"
+                )
             n_elems = n_bytes // elem_bytes
             dst = flat[written_elems : written_elems + n_elems]
-            futures.append((cufile_handle.pread(dst, file_offset=file_off), n_bytes, file_off))
+            futures.append(
+                (cufile_handle.pread(dst, file_offset=file_off), n_bytes, file_off)
+            )
             written_elems += n_elems
         for fut, expected_bytes, file_off in futures:
             got = fut.get()
