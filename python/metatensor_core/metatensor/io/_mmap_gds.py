@@ -226,7 +226,7 @@ def _make_gds_partial_callback(cufile_handle):
     return callback
 
 
-def _labels_arg(labels: Optional[Labels]):
+def _labels_arg(labels: Optional[Labels]) -> "ctypes._Pointer[mts_labels_t]":
     """NULL pointer means 'select all on this dimension' to the C core."""
     if labels is None:
         return ctypes.POINTER(mts_labels_t)()
