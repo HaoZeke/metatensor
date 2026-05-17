@@ -203,6 +203,191 @@ where
 }
 
 
+/// Load a `TensorMap` with sample selection using a multi-region
+/// callback (the mmap-backed variant of [`load_partial`]). The
+/// callback receives, per array, the list of `(file_offset,
+/// region_len)` byte runs that must be concatenated in order to form
+/// the array, and returns the resulting `mts_array_t`.
+///
+/// Property selection is intentionally not supported here: per-row
+/// property filtering produces O(n_samples * n_kept_props) regions,
+/// which defeats the multi-region win. Callers that need property
+/// filtering should fall back to [`load_partial`].
+pub fn load_partial_mmap<F>(
+    path: &str,
+    keys: Option<&Labels>,
+    samples: Option<&Labels>,
+    create_array: F,
+) -> Result<TensorMap, Error>
+where
+    F: Fn(Vec<usize>, DLDataType, Vec<(usize, usize)>) -> Result<mts_array_t, Error>,
+{
+    let file = std::fs::File::open(path)?;
+    let mmap = unsafe { Mmap::map(&file) }.map_err(Error::Io)?;
+
+    let cursor = Cursor::new(mmap.as_ref());
+    let mut archive = ZipArchive::new(cursor).map_err(|e| ("<root>".into(), e))?;
+
+    let keys_path = String::from("keys.npy");
+    let all_keys = load_labels(archive.by_name(&keys_path).map_err(|e| (keys_path, e))?)?;
+
+    let block_indices = compute_indices(&all_keys, keys)?;
+
+    let filtered_keys = labels_subset(&all_keys, &block_indices)?;
+
+    let mut blocks = Vec::with_capacity(block_indices.len());
+    for &block_i in &block_indices {
+        let prefix = format!("blocks/{}/", block_i);
+        let block = read_partial_mmap_block(
+            &mut archive, mmap.as_ref(), &prefix, samples, false, &create_array,
+        )?;
+        blocks.push(block);
+    }
+
+    let mut tensor = TensorMap::new(Arc::new(filtered_keys), blocks)?;
+
+    super::load_info_json(&mut archive, |key, value| {
+        tensor.add_info(
+            key,
+            ConstCString::new(
+                CString::new(value).expect("value in 'info.json' should not contain a NUL byte"),
+            ),
+        );
+    })?;
+
+    Ok(tensor)
+}
+
+
+/// Block-level multi-region partial mmap load. See [`load_partial_mmap`].
+pub fn load_block_partial_mmap<F>(
+    path: &str,
+    samples: Option<&Labels>,
+    create_array: F,
+) -> Result<TensorBlock, Error>
+where
+    F: Fn(Vec<usize>, DLDataType, Vec<(usize, usize)>) -> Result<mts_array_t, Error>,
+{
+    let file = std::fs::File::open(path)?;
+    let mmap = unsafe { Mmap::map(&file) }.map_err(Error::Io)?;
+    let cursor = Cursor::new(mmap.as_ref());
+    let mut archive = ZipArchive::new(cursor).map_err(|e| ("<root>".into(), e))?;
+    read_partial_mmap_block(
+        &mut archive, mmap.as_ref(), "", samples, false, &create_array,
+    )
+}
+
+
+fn read_partial_mmap_block<F>(
+    archive: &mut ZipArchive<Cursor<&[u8]>>,
+    mmap: &[u8],
+    prefix: &str,
+    samples_sel: Option<&Labels>,
+    is_gradient: bool,
+    create_array: &F,
+) -> Result<TensorBlock, Error>
+where
+    F: Fn(Vec<usize>, DLDataType, Vec<(usize, usize)>) -> Result<mts_array_t, Error>,
+{
+    let samples_path = format!("{}samples.npy", prefix);
+    let samples_file = archive.by_name(&samples_path).map_err(|e| (samples_path, e))?;
+    let all_samples = load_labels(samples_file)?;
+
+    let values_path = format!("{}values.npy", prefix);
+    let (src_shape, dtype, raw_data_offset) =
+        parse_stored_npy_entry(archive, mmap, &values_path)?;
+
+    let sample_indices = compute_indices(&all_samples, samples_sel)?;
+    let (_, _, src_n_props, row_bytes) = npy_layout(&src_shape, dtype);
+
+    let mut output_shape = Vec::with_capacity(src_shape.len());
+    output_shape.push(sample_indices.len());
+    if src_shape.len() > 2 {
+        output_shape.extend_from_slice(&src_shape[1..src_shape.len() - 1]);
+    }
+    output_shape.push(src_n_props);
+
+    // Audit #11: regions is intentionally a Vec, not SmallVec. The
+    // callback's signature takes Vec by value; switching to SmallVec
+    // would ripple through the trait bound and the C wrapper. The
+    // per-call cost is amortised at the C-wrapper level by the scratch
+    // Vec reuse from audit #16.
+    let regions: Vec<(usize, usize)> = sample_indices
+        .iter()
+        .map(|&old_row| (raw_data_offset + old_row * row_bytes, row_bytes))
+        .collect();
+
+    let data = create_array(output_shape, dtype, regions)?;
+
+    let new_samples = Arc::new(labels_subset(&all_samples, &sample_indices)?);
+    let components = load_components(archive, prefix, src_shape.len())?;
+
+    let props_path = format!("{}properties.npy", prefix);
+    let props_file = archive.by_name(&props_path).map_err(|e| (props_path, e))?;
+    let new_properties = Arc::new(load_labels(props_file)?);
+
+    let mut block = TensorBlock::new(data, new_samples, components, new_properties.clone())?;
+
+    if !is_gradient {
+        for parameter in &super::discover_gradient_parameters(archive, prefix) {
+            let grad_prefix = format!("{}gradients/{}/", prefix, parameter);
+            let gradient = read_partial_mmap_gradient(
+                archive, mmap, &grad_prefix, &sample_indices, &new_properties, create_array,
+            )?;
+            block.add_gradient(parameter, gradient)?;
+        }
+    }
+
+    Ok(block)
+}
+
+
+fn read_partial_mmap_gradient<F>(
+    archive: &mut ZipArchive<Cursor<&[u8]>>,
+    mmap: &[u8],
+    prefix: &str,
+    parent_sample_indices: &[usize],
+    new_properties: &Arc<Labels>,
+    create_array: &F,
+) -> Result<TensorBlock, Error>
+where
+    F: Fn(Vec<usize>, DLDataType, Vec<(usize, usize)>) -> Result<mts_array_t, Error>,
+{
+    let mut parent_map: HashMap<i32, i32> = HashMap::new();
+    for (new_idx, &old_idx) in parent_sample_indices.iter().enumerate() {
+        parent_map.insert(old_idx as i32, new_idx as i32);
+    }
+
+    let samples_path = format!("{}samples.npy", prefix);
+    let samples_file = archive.by_name(&samples_path).map_err(|e| (samples_path, e))?;
+    let grad_samples = load_labels(samples_file)?;
+
+    let values_path = format!("{}values.npy", prefix);
+    let (src_shape, dtype, raw_data_offset) =
+        parse_stored_npy_entry(archive, mmap, &values_path)?;
+
+    let components = load_components(archive, prefix, src_shape.len())?;
+    let (kept_grad_indices, new_grad_samples) =
+        reindex_gradient_samples(&grad_samples, parent_sample_indices)?;
+    let (_, _, src_n_props, row_bytes) = npy_layout(&src_shape, dtype);
+
+    let mut output_shape = Vec::with_capacity(src_shape.len());
+    output_shape.push(kept_grad_indices.len());
+    if src_shape.len() > 2 {
+        output_shape.extend_from_slice(&src_shape[1..src_shape.len() - 1]);
+    }
+    output_shape.push(src_n_props);
+
+    let regions: Vec<(usize, usize)> = kept_grad_indices
+        .iter()
+        .map(|&old_row| (raw_data_offset + old_row * row_bytes, row_bytes))
+        .collect();
+
+    let data = create_array(output_shape, dtype, regions)?;
+
+    TensorBlock::new(data, new_grad_samples, components, new_properties.clone())
+}
+
 
 /// Load a single `TensorBlock` from the file at the given path,
 /// selecting only a subset of samples and properties.

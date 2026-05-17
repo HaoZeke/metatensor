@@ -384,6 +384,31 @@ typedef mts_status_t (*mts_create_array_callback_t)(const uintptr_t *shape,
                                                     struct mts_array_t *array);
 
 /**
+ * Multi-region version of `mts_create_file_array_callback_t`, used by
+ * `mts_tensormap_load_partial_mmap` / `mts_block_load_partial_mmap`.
+ *
+ * The callback receives `region_count` contiguous byte runs in the
+ * source file (`file_offsets[i]` .. `file_offsets[i] + region_lens[i]`);
+ * it must build an `mts_array_t` whose data is the logical
+ * concatenation of those regions, in order. For `region_count == 1`
+ * the callback degenerates to the single-region shape and the array is
+ * just the raw bytes at `(file_offsets[0], region_lens[0])`. For
+ * `region_count > 1` (typical for partial selection), the callback
+ * assembles the regions in order (e.g. via N cuFile preads into one
+ * GPU buffer, or via N mmap views + concatenation).
+ *
+ * Total byte length is `sum(region_lens)`.
+ */
+typedef mts_status_t (*mts_create_partial_file_array_callback_t)(void *user_data,
+                                                                 const uintptr_t *shape,
+                                                                 uintptr_t shape_count,
+                                                                 DLDataType dtype,
+                                                                 uintptr_t region_count,
+                                                                 const uintptr_t *file_offsets,
+                                                                 const uintptr_t *region_lens,
+                                                                 struct mts_array_t *array);
+
+/**
  * Function pointer used by `mts_tensormap_load_mmap` /
  * `mts_block_load_mmap` to materialise each value/gradient array.
  *
@@ -1367,6 +1392,15 @@ struct mts_block_t *mts_block_load_partial(const char *path,
                                            mts_create_array_callback_t create_array);
 
 /**
+ * mmap-backed partial block load with the multi-region callback. See
+ * `mts_tensormap_load_partial_mmap` for semantics.
+ */
+struct mts_block_t *mts_block_load_partial_mmap(const char *path,
+                                                const struct mts_labels_t *samples,
+                                                mts_create_partial_file_array_callback_t create_array,
+                                                void *user_data);
+
+/**
  * Load a `TensorBlock` from the file at the given path using memory mapping.
  *
  * See `mts_tensormap_load_mmap` for callback semantics and file format
@@ -1581,6 +1615,26 @@ struct mts_tensormap_t *mts_tensormap_load_partial(const char *path,
                                                    const struct mts_labels_t *samples,
                                                    const struct mts_labels_t *properties,
                                                    mts_create_array_callback_t create_array);
+
+/**
+ * mmap-backed partial load: combines block / sample selection with the
+ * multi-region `mts_create_partial_file_array_callback_t`. The callback
+ * receives, per array, the list of `(file_offset, region_len)` byte
+ * runs that should be concatenated to form the array.
+ *
+ * Property selection is intentionally not supported here -- per-row
+ * property filtering produces too many regions to be useful. Use
+ * `mts_tensormap_load_partial` for property filtering.
+ *
+ * `keys` and `samples` may be NULL (= "select all" on that dimension).
+ * `create_array` must be non-NULL. `user_data` is forwarded to every
+ * callback invocation.
+ */
+struct mts_tensormap_t *mts_tensormap_load_partial_mmap(const char *path,
+                                                        const struct mts_labels_t *keys,
+                                                        const struct mts_labels_t *samples,
+                                                        mts_create_partial_file_array_callback_t create_array,
+                                                        void *user_data);
 
 /**
  * Save a tensor map to the file at the given path.

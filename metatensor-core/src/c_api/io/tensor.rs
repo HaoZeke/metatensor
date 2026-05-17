@@ -9,9 +9,13 @@ use crate::Error;
 use crate::data::mts_array_t;
 
 use super::{ExternalBuffer, mts_realloc_buffer_t};
+
 use super::super::status::{mts_status_t, catch_unwind};
 use super::super::tensor::mts_tensormap_t;
-use super::{mts_create_array_callback_t, mts_create_file_array_callback_t};
+use super::{
+    mts_create_array_callback_t, mts_create_file_array_callback_t,
+    mts_create_partial_file_array_callback_t,
+};
 
 /// Load a tensor map from the file at the given path.
 ///
@@ -338,6 +342,115 @@ pub unsafe extern "C" fn mts_tensormap_load_partial(
 
     return result;
 }
+
+/// mmap-backed partial load: combines block / sample selection with the
+/// multi-region `mts_create_partial_file_array_callback_t`. The callback
+/// receives, per array, the list of `(file_offset, region_len)` byte
+/// runs that should be concatenated to form the array.
+///
+/// Property selection is intentionally not supported here -- per-row
+/// property filtering produces too many regions to be useful. Use
+/// `mts_tensormap_load_partial` for property filtering.
+///
+/// `keys` and `samples` may be NULL (= "select all" on that dimension).
+/// `create_array` must be non-NULL. `user_data` is forwarded to every
+/// callback invocation.
+#[no_mangle]
+pub unsafe extern "C" fn mts_tensormap_load_partial_mmap(
+    path: *const c_char,
+    keys: *const super::super::labels::mts_labels_t,
+    samples: *const super::super::labels::mts_labels_t,
+    create_array: mts_create_partial_file_array_callback_t,
+    user_data: *mut c_void,
+) -> *mut mts_tensormap_t {
+    let mut result = std::ptr::null_mut();
+    let unwind_wrapper = std::panic::AssertUnwindSafe(&mut result);
+    let status = catch_unwind(move || {
+        check_pointers_non_null!(path);
+
+        let Some(callback) = create_array else {
+            return Err(Error::InvalidParameter(
+                "create_array must not be NULL in mts_tensormap_load_partial_mmap".into()
+            ));
+        };
+
+        let keys_ref = if keys.is_null() { None } else { Some(&**keys) };
+        let samples_ref = if samples.is_null() { None } else { Some(&**samples) };
+
+        let path = CStr::from_ptr(path).to_str().expect("use UTF-8 for path");
+        let wrapped = wrap_create_partial_file_array(callback, user_data);
+        let tensor = crate::io::load_partial_mmap(path, keys_ref, samples_ref, wrapped)
+            .map_err(|err| match err {
+                Error::Serialization(message) => Error::Serialization(format!(
+                    "unable to partial-mmap-load TensorMap from '{}': {}", path, message
+                )),
+                err => err,
+            })?;
+
+        let _ = &unwind_wrapper;
+        *(unwind_wrapper.0) = mts_tensormap_t::into_boxed_raw(tensor);
+        Ok(())
+    });
+
+    if !status.is_success() {
+        return std::ptr::null_mut();
+    }
+
+    return result;
+}
+
+
+pub(super) fn wrap_create_partial_file_array(
+    callback: unsafe extern "C" fn(
+        *mut c_void, *const usize, usize,
+        DLDataType,
+        usize, *const usize, *const usize,
+        *mut mts_array_t,
+    ) -> mts_status_t,
+    user_data: *mut c_void,
+) -> impl Fn(Vec<usize>, DLDataType, Vec<(usize, usize)>) -> Result<mts_array_t, Error> {
+    let user_data = user_data as usize;
+    // Audit #16: reuse the offsets/lens scratch Vecs across all callback
+    // invocations on this load. Without this, every value array (one per
+    // block + gradient) would allocate two fresh Vecs to split the
+    // (offset, len) tuples into the C ABI's SoA shape.
+    let offsets_scratch = std::cell::RefCell::new(Vec::<usize>::new());
+    let lens_scratch = std::cell::RefCell::new(Vec::<usize>::new());
+    move |shape: Vec<usize>, dtype, regions: Vec<(usize, usize)>| {
+        let mut offsets = offsets_scratch.borrow_mut();
+        let mut lens = lens_scratch.borrow_mut();
+        offsets.clear();
+        lens.clear();
+        offsets.reserve(regions.len());
+        lens.reserve(regions.len());
+        for &(o, l) in &regions {
+            offsets.push(o);
+            lens.push(l);
+        }
+        let mut array = mts_array_t::null();
+        let status = unsafe {
+            callback(
+                user_data as *mut c_void,
+                shape.as_ptr(),
+                shape.len(),
+                dtype,
+                regions.len(),
+                offsets.as_ptr(),
+                lens.as_ptr(),
+                &mut array,
+            )
+        };
+        if status.is_success() {
+            Ok(array)
+        } else {
+            crate::c_api::add_error_context(
+                "failed to create a new array in mts_tensormap_load_partial_mmap",
+            );
+            Err(Error::CallbackError)
+        }
+    }
+}
+
 
 pub(super) fn wrap_create_file_array(
     callback: unsafe extern "C" fn(

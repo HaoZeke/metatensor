@@ -63,6 +63,32 @@ pub(crate) type mts_create_file_array_callback_t = Option<unsafe extern "C" fn(
     array: *mut mts_array_t,
 ) -> mts_status_t>;
 
+/// Multi-region version of `mts_create_file_array_callback_t`, used by
+/// `mts_tensormap_load_partial_mmap` / `mts_block_load_partial_mmap`.
+///
+/// The callback receives `region_count` contiguous byte runs in the
+/// source file (`file_offsets[i]` .. `file_offsets[i] + region_lens[i]`);
+/// it must build an `mts_array_t` whose data is the logical
+/// concatenation of those regions, in order. For `region_count == 1`
+/// the callback degenerates to the single-region shape and the array is
+/// just the raw bytes at `(file_offsets[0], region_lens[0])`. For
+/// `region_count > 1` (typical for partial selection), the callback
+/// assembles the regions in order (e.g. via N cuFile preads into one
+/// GPU buffer, or via N mmap views + concatenation).
+///
+/// Total byte length is `sum(region_lens)`.
+#[allow(non_camel_case_types)]
+pub(crate) type mts_create_partial_file_array_callback_t = Option<unsafe extern "C" fn(
+    user_data: *mut c_void,
+    shape: *const usize,
+    shape_count: usize,
+    dtype: DLDataType,
+    region_count: usize,
+    file_offsets: *const usize,
+    region_lens: *const usize,
+    array: *mut mts_array_t,
+) -> mts_status_t>;
+
 /// Function pointer to grow in-memory buffers for `mts_tensormap_save_buffer`
 /// and `mts_labels_save_buffer`.
 ///

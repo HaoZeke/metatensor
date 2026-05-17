@@ -12,8 +12,11 @@ use super::{ExternalBuffer, mts_realloc_buffer_t};
 
 use super::super::status::{mts_status_t, catch_unwind};
 use super::super::blocks::mts_block_t;
-use super::{mts_create_array_callback_t, mts_create_file_array_callback_t};
-use super::tensor::wrap_create_file_array;
+use super::{
+    mts_create_array_callback_t, mts_create_file_array_callback_t,
+    mts_create_partial_file_array_callback_t,
+};
+use super::tensor::{wrap_create_file_array, wrap_create_partial_file_array};
 
 
 /// Load a tensor block from the file at the given path.
@@ -239,6 +242,50 @@ pub unsafe extern "C" fn mts_block_load_partial(
     return result;
 }
 
+
+/// mmap-backed partial block load with the multi-region callback. See
+/// `mts_tensormap_load_partial_mmap` for semantics.
+#[no_mangle]
+pub unsafe extern "C" fn mts_block_load_partial_mmap(
+    path: *const c_char,
+    samples: *const super::super::labels::mts_labels_t,
+    create_array: mts_create_partial_file_array_callback_t,
+    user_data: *mut c_void,
+) -> *mut mts_block_t {
+    let mut result = std::ptr::null_mut();
+    let unwind_wrapper = std::panic::AssertUnwindSafe(&mut result);
+    let status = catch_unwind(move || {
+        check_pointers_non_null!(path);
+
+        let Some(callback) = create_array else {
+            return Err(Error::InvalidParameter(
+                "create_array must not be NULL in mts_block_load_partial_mmap".into()
+            ));
+        };
+
+        let samples_ref = if samples.is_null() { None } else { Some(&**samples) };
+
+        let path = CStr::from_ptr(path).to_str().expect("use UTF-8 for path");
+        let wrapped = wrap_create_partial_file_array(callback, user_data);
+        let block = crate::io::load_block_partial_mmap(path, samples_ref, wrapped)
+            .map_err(|err| match err {
+                Error::Serialization(message) => Error::Serialization(format!(
+                    "unable to partial-mmap-load TensorBlock from '{}': {}", path, message
+                )),
+                err => err,
+            })?;
+
+        let _ = &unwind_wrapper;
+        *(unwind_wrapper.0) = mts_block_t::into_boxed_raw(block);
+        Ok(())
+    });
+
+    if !status.is_success() {
+        return std::ptr::null_mut();
+    }
+
+    return result;
+}
 
 /// Load a `TensorBlock` from the file at the given path using memory mapping.
 ///
