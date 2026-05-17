@@ -157,23 +157,23 @@ end
 # ===== Function definitions
 
 function mts_disable_panic_printing()
-    ccall((:mts_disable_panic_printing, libmetatensor),
+    ccall((:mts_disable_panic_printing, libmetatensor), 
         Cvoid,
         (),
-
+        
     )
 end
 
 function mts_version()
-    ccall((:mts_version, libmetatensor),
+    ccall((:mts_version, libmetatensor), 
         Ptr{Cchar},
         (),
-
+        
     )
 end
 
 function mts_last_error(message::Ptr{Ptr{Cchar}}, origin::Ptr{Ptr{Cchar}}, data::Ptr{Ptr{Cvoid}})
-    ccall((:mts_last_error, libmetatensor),
+    ccall((:mts_last_error, libmetatensor), 
         mts_status_t,
         (Ptr{Ptr{Cchar}}, Ptr{Ptr{Cchar}}, Ptr{Ptr{Cvoid}},),
         message, origin, data
@@ -181,7 +181,7 @@ function mts_last_error(message::Ptr{Ptr{Cchar}}, origin::Ptr{Ptr{Cchar}}, data:
 end
 
 function mts_set_last_error(message::Ptr{Cchar}, origin::Ptr{Cchar}, data::Ptr{Cvoid}, data_deleter::Ptr{Cvoid} #= (Ptr{Cvoid}) -> Cvoid =#)
-    ccall((:mts_set_last_error, libmetatensor),
+    ccall((:mts_set_last_error, libmetatensor), 
         mts_status_t,
         (Ptr{Cchar}, Ptr{Cchar}, Ptr{Cvoid}, Ptr{Cvoid} #= (Ptr{Cvoid}) -> Cvoid =#,),
         message, origin, data, data_deleter
@@ -189,7 +189,7 @@ function mts_set_last_error(message::Ptr{Cchar}, origin::Ptr{Cchar}, data::Ptr{C
 end
 
 function mts_labels(dimensions::Ptr{Ptr{Cchar}}, dimensions_count::UIntptr, array::mts_array_t)
-    ccall((:mts_labels, libmetatensor),
+    ccall((:mts_labels, libmetatensor), 
         Ptr{mts_labels_t},
         (Ptr{Ptr{Cchar}}, UIntptr, mts_array_t,),
         dimensions, dimensions_count, array
@@ -197,7 +197,7 @@ function mts_labels(dimensions::Ptr{Ptr{Cchar}}, dimensions_count::UIntptr, arra
 end
 
 function mts_labels_assume_unique(names::Ptr{Ptr{Cchar}}, names_count::UIntptr, array::mts_array_t)
-    ccall((:mts_labels_assume_unique, libmetatensor),
+    ccall((:mts_labels_assume_unique, libmetatensor), 
         Ptr{mts_labels_t},
         (Ptr{Ptr{Cchar}}, UIntptr, mts_array_t,),
         names, names_count, array
@@ -205,7 +205,7 @@ function mts_labels_assume_unique(names::Ptr{Ptr{Cchar}}, names_count::UIntptr, 
 end
 
 function mts_labels_dimensions(labels::Ptr{mts_labels_t}, names::Ptr{Ptr{Ptr{Cchar}}}, count::Ptr{UIntptr})
-    ccall((:mts_labels_dimensions, libmetatensor),
+    ccall((:mts_labels_dimensions, libmetatensor), 
         mts_status_t,
         (Ptr{mts_labels_t}, Ptr{Ptr{Ptr{Cchar}}}, Ptr{UIntptr},),
         labels, names, count
@@ -213,7 +213,7 @@ function mts_labels_dimensions(labels::Ptr{mts_labels_t}, names::Ptr{Ptr{Ptr{Cch
 end
 
 function mts_labels_values(labels::Ptr{mts_labels_t}, array::Ptr{mts_array_t})
-    ccall((:mts_labels_values, libmetatensor),
+    ccall((:mts_labels_values, libmetatensor), 
         mts_status_t,
         (Ptr{mts_labels_t}, Ptr{mts_array_t},),
         labels, array
@@ -221,7 +221,7 @@ function mts_labels_values(labels::Ptr{mts_labels_t}, array::Ptr{mts_array_t})
 end
 
 function mts_labels_values_cpu(labels::Ptr{mts_labels_t}, values::Ptr{Ptr{Int32}}, count::Ptr{UIntptr}, size::Ptr{UIntptr})
-    ccall((:mts_labels_values_cpu, libmetatensor),
+    ccall((:mts_labels_values_cpu, libmetatensor), 
         mts_status_t,
         (Ptr{mts_labels_t}, Ptr{Ptr{Int32}}, Ptr{UIntptr}, Ptr{UIntptr},),
         labels, values, count, size
@@ -229,7 +229,7 @@ function mts_labels_values_cpu(labels::Ptr{mts_labels_t}, values::Ptr{Ptr{Int32}
 end
 
 function mts_labels_position(labels::Ptr{mts_labels_t}, values::Ptr{Int32}, values_count::UIntptr, result::Ptr{Int64})
-    ccall((:mts_labels_position, libmetatensor),
+    ccall((:mts_labels_position, libmetatensor), 
         mts_status_t,
         (Ptr{mts_labels_t}, Ptr{Int32}, UIntptr, Ptr{Int64},),
         labels, values, values_count, result
@@ -237,7 +237,7 @@ function mts_labels_position(labels::Ptr{mts_labels_t}, values::Ptr{Int32}, valu
 end
 
 function mts_labels_clone(labels::Ptr{mts_labels_t})
-    ccall((:mts_labels_clone, libmetatensor),
+    ccall((:mts_labels_clone, libmetatensor), 
         Ptr{mts_labels_t},
         (Ptr{mts_labels_t},),
         labels
@@ -245,7 +245,7 @@ function mts_labels_clone(labels::Ptr{mts_labels_t})
 end
 
 function mts_labels_union(first::Ptr{mts_labels_t}, second::Ptr{mts_labels_t}, result::Ptr{Ptr{mts_labels_t}}, first_mapping::Ptr{Int64}, first_mapping_count::UIntptr, second_mapping::Ptr{Int64}, second_mapping_count::UIntptr)
-    ccall((:mts_labels_union, libmetatensor),
+    ccall((:mts_labels_union, libmetatensor), 
         mts_status_t,
         (Ptr{mts_labels_t}, Ptr{mts_labels_t}, Ptr{Ptr{mts_labels_t}}, Ptr{Int64}, UIntptr, Ptr{Int64}, UIntptr,),
         first, second, result, first_mapping, first_mapping_count, second_mapping, second_mapping_count
@@ -253,7 +253,7 @@ function mts_labels_union(first::Ptr{mts_labels_t}, second::Ptr{mts_labels_t}, r
 end
 
 function mts_labels_intersection(first::Ptr{mts_labels_t}, second::Ptr{mts_labels_t}, result::Ptr{Ptr{mts_labels_t}}, first_mapping::Ptr{Int64}, first_mapping_count::UIntptr, second_mapping::Ptr{Int64}, second_mapping_count::UIntptr)
-    ccall((:mts_labels_intersection, libmetatensor),
+    ccall((:mts_labels_intersection, libmetatensor), 
         mts_status_t,
         (Ptr{mts_labels_t}, Ptr{mts_labels_t}, Ptr{Ptr{mts_labels_t}}, Ptr{Int64}, UIntptr, Ptr{Int64}, UIntptr,),
         first, second, result, first_mapping, first_mapping_count, second_mapping, second_mapping_count
@@ -261,7 +261,7 @@ function mts_labels_intersection(first::Ptr{mts_labels_t}, second::Ptr{mts_label
 end
 
 function mts_labels_difference(first::Ptr{mts_labels_t}, second::Ptr{mts_labels_t}, result::Ptr{Ptr{mts_labels_t}}, first_mapping::Ptr{Int64}, first_mapping_count::UIntptr)
-    ccall((:mts_labels_difference, libmetatensor),
+    ccall((:mts_labels_difference, libmetatensor), 
         mts_status_t,
         (Ptr{mts_labels_t}, Ptr{mts_labels_t}, Ptr{Ptr{mts_labels_t}}, Ptr{Int64}, UIntptr,),
         first, second, result, first_mapping, first_mapping_count
@@ -269,7 +269,7 @@ function mts_labels_difference(first::Ptr{mts_labels_t}, second::Ptr{mts_labels_
 end
 
 function mts_labels_select(labels::Ptr{mts_labels_t}, selection::Ptr{mts_labels_t}, selected::Ptr{UInt64}, selected_count::Ptr{UIntptr})
-    ccall((:mts_labels_select, libmetatensor),
+    ccall((:mts_labels_select, libmetatensor), 
         mts_status_t,
         (Ptr{mts_labels_t}, Ptr{mts_labels_t}, Ptr{UInt64}, Ptr{UIntptr},),
         labels, selection, selected, selected_count
@@ -277,7 +277,7 @@ function mts_labels_select(labels::Ptr{mts_labels_t}, selection::Ptr{mts_labels_
 end
 
 function mts_labels_free(labels::Ptr{mts_labels_t})
-    ccall((:mts_labels_free, libmetatensor),
+    ccall((:mts_labels_free, libmetatensor), 
         mts_status_t,
         (Ptr{mts_labels_t},),
         labels
@@ -285,7 +285,7 @@ function mts_labels_free(labels::Ptr{mts_labels_t})
 end
 
 function mts_register_data_origin(name::Ptr{Cchar}, origin::Ptr{mts_data_origin_t})
-    ccall((:mts_register_data_origin, libmetatensor),
+    ccall((:mts_register_data_origin, libmetatensor), 
         mts_status_t,
         (Ptr{Cchar}, Ptr{mts_data_origin_t},),
         name, origin
@@ -293,7 +293,7 @@ function mts_register_data_origin(name::Ptr{Cchar}, origin::Ptr{mts_data_origin_
 end
 
 function mts_get_data_origin(origin::mts_data_origin_t, buffer::Ptr{Cchar}, buffer_size::UIntptr)
-    ccall((:mts_get_data_origin, libmetatensor),
+    ccall((:mts_get_data_origin, libmetatensor), 
         mts_status_t,
         (mts_data_origin_t, Ptr{Cchar}, UIntptr,),
         origin, buffer, buffer_size
@@ -301,7 +301,7 @@ function mts_get_data_origin(origin::mts_data_origin_t, buffer::Ptr{Cchar}, buff
 end
 
 function mts_block(data::mts_array_t, samples::Ptr{mts_labels_t}, components::Ptr{Ptr{mts_labels_t}}, components_count::UIntptr, properties::Ptr{mts_labels_t})
-    ccall((:mts_block, libmetatensor),
+    ccall((:mts_block, libmetatensor), 
         Ptr{mts_block_t},
         (mts_array_t, Ptr{mts_labels_t}, Ptr{Ptr{mts_labels_t}}, UIntptr, Ptr{mts_labels_t},),
         data, samples, components, components_count, properties
@@ -309,7 +309,7 @@ function mts_block(data::mts_array_t, samples::Ptr{mts_labels_t}, components::Pt
 end
 
 function mts_block_free(block::Ptr{mts_block_t})
-    ccall((:mts_block_free, libmetatensor),
+    ccall((:mts_block_free, libmetatensor), 
         mts_status_t,
         (Ptr{mts_block_t},),
         block
@@ -317,7 +317,7 @@ function mts_block_free(block::Ptr{mts_block_t})
 end
 
 function mts_block_copy(block::Ptr{mts_block_t})
-    ccall((:mts_block_copy, libmetatensor),
+    ccall((:mts_block_copy, libmetatensor), 
         Ptr{mts_block_t},
         (Ptr{mts_block_t},),
         block
@@ -325,7 +325,7 @@ function mts_block_copy(block::Ptr{mts_block_t})
 end
 
 function mts_block_labels(block::Ptr{mts_block_t}, axis::UIntptr)
-    ccall((:mts_block_labels, libmetatensor),
+    ccall((:mts_block_labels, libmetatensor), 
         Ptr{mts_labels_t},
         (Ptr{mts_block_t}, UIntptr,),
         block, axis
@@ -333,7 +333,7 @@ function mts_block_labels(block::Ptr{mts_block_t}, axis::UIntptr)
 end
 
 function mts_block_gradient(block::Ptr{mts_block_t}, parameter::Ptr{Cchar}, gradient::Ptr{Ptr{mts_block_t}})
-    ccall((:mts_block_gradient, libmetatensor),
+    ccall((:mts_block_gradient, libmetatensor), 
         mts_status_t,
         (Ptr{mts_block_t}, Ptr{Cchar}, Ptr{Ptr{mts_block_t}},),
         block, parameter, gradient
@@ -341,7 +341,7 @@ function mts_block_gradient(block::Ptr{mts_block_t}, parameter::Ptr{Cchar}, grad
 end
 
 function mts_block_data(block::Ptr{mts_block_t}, data::Ptr{mts_array_t})
-    ccall((:mts_block_data, libmetatensor),
+    ccall((:mts_block_data, libmetatensor), 
         mts_status_t,
         (Ptr{mts_block_t}, Ptr{mts_array_t},),
         block, data
@@ -349,7 +349,7 @@ function mts_block_data(block::Ptr{mts_block_t}, data::Ptr{mts_array_t})
 end
 
 function mts_block_add_gradient(block::Ptr{mts_block_t}, parameter::Ptr{Cchar}, gradient::Ptr{mts_block_t})
-    ccall((:mts_block_add_gradient, libmetatensor),
+    ccall((:mts_block_add_gradient, libmetatensor), 
         mts_status_t,
         (Ptr{mts_block_t}, Ptr{Cchar}, Ptr{mts_block_t},),
         block, parameter, gradient
@@ -357,7 +357,7 @@ function mts_block_add_gradient(block::Ptr{mts_block_t}, parameter::Ptr{Cchar}, 
 end
 
 function mts_block_gradients_list(block::Ptr{mts_block_t}, parameters::Ptr{Ptr{Ptr{Cchar}}}, parameters_count::Ptr{UIntptr})
-    ccall((:mts_block_gradients_list, libmetatensor),
+    ccall((:mts_block_gradients_list, libmetatensor), 
         mts_status_t,
         (Ptr{mts_block_t}, Ptr{Ptr{Ptr{Cchar}}}, Ptr{UIntptr},),
         block, parameters, parameters_count
@@ -365,7 +365,7 @@ function mts_block_gradients_list(block::Ptr{mts_block_t}, parameters::Ptr{Ptr{P
 end
 
 function mts_block_device(block::Ptr{mts_block_t}, device::Ptr{DLDevice})
-    ccall((:mts_block_device, libmetatensor),
+    ccall((:mts_block_device, libmetatensor), 
         mts_status_t,
         (Ptr{mts_block_t}, Ptr{DLDevice},),
         block, device
@@ -373,7 +373,7 @@ function mts_block_device(block::Ptr{mts_block_t}, device::Ptr{DLDevice})
 end
 
 function mts_block_dtype(block::Ptr{mts_block_t}, dtype::Ptr{DLDataType})
-    ccall((:mts_block_dtype, libmetatensor),
+    ccall((:mts_block_dtype, libmetatensor), 
         mts_status_t,
         (Ptr{mts_block_t}, Ptr{DLDataType},),
         block, dtype
@@ -381,7 +381,7 @@ function mts_block_dtype(block::Ptr{mts_block_t}, dtype::Ptr{DLDataType})
 end
 
 function mts_tensormap(keys::Ptr{mts_labels_t}, blocks::Ptr{Ptr{mts_block_t}}, blocks_count::UIntptr)
-    ccall((:mts_tensormap, libmetatensor),
+    ccall((:mts_tensormap, libmetatensor), 
         Ptr{mts_tensormap_t},
         (Ptr{mts_labels_t}, Ptr{Ptr{mts_block_t}}, UIntptr,),
         keys, blocks, blocks_count
@@ -389,7 +389,7 @@ function mts_tensormap(keys::Ptr{mts_labels_t}, blocks::Ptr{Ptr{mts_block_t}}, b
 end
 
 function mts_tensormap_free(tensor::Ptr{mts_tensormap_t})
-    ccall((:mts_tensormap_free, libmetatensor),
+    ccall((:mts_tensormap_free, libmetatensor), 
         mts_status_t,
         (Ptr{mts_tensormap_t},),
         tensor
@@ -397,7 +397,7 @@ function mts_tensormap_free(tensor::Ptr{mts_tensormap_t})
 end
 
 function mts_tensormap_copy(tensor::Ptr{mts_tensormap_t})
-    ccall((:mts_tensormap_copy, libmetatensor),
+    ccall((:mts_tensormap_copy, libmetatensor), 
         Ptr{mts_tensormap_t},
         (Ptr{mts_tensormap_t},),
         tensor
@@ -405,7 +405,7 @@ function mts_tensormap_copy(tensor::Ptr{mts_tensormap_t})
 end
 
 function mts_tensormap_keys(tensor::Ptr{mts_tensormap_t})
-    ccall((:mts_tensormap_keys, libmetatensor),
+    ccall((:mts_tensormap_keys, libmetatensor), 
         Ptr{mts_labels_t},
         (Ptr{mts_tensormap_t},),
         tensor
@@ -413,7 +413,7 @@ function mts_tensormap_keys(tensor::Ptr{mts_tensormap_t})
 end
 
 function mts_tensormap_block_by_id(tensor::Ptr{mts_tensormap_t}, block::Ptr{Ptr{mts_block_t}}, index::UIntptr)
-    ccall((:mts_tensormap_block_by_id, libmetatensor),
+    ccall((:mts_tensormap_block_by_id, libmetatensor), 
         mts_status_t,
         (Ptr{mts_tensormap_t}, Ptr{Ptr{mts_block_t}}, UIntptr,),
         tensor, block, index
@@ -421,7 +421,7 @@ function mts_tensormap_block_by_id(tensor::Ptr{mts_tensormap_t}, block::Ptr{Ptr{
 end
 
 function mts_tensormap_keys_to_properties(tensor::Ptr{mts_tensormap_t}, keys_to_move::Ptr{mts_labels_t}, fill_value::mts_array_t, sort_samples::Cbool)
-    ccall((:mts_tensormap_keys_to_properties, libmetatensor),
+    ccall((:mts_tensormap_keys_to_properties, libmetatensor), 
         Ptr{mts_tensormap_t},
         (Ptr{mts_tensormap_t}, Ptr{mts_labels_t}, mts_array_t, Cbool,),
         tensor, keys_to_move, fill_value, sort_samples
@@ -429,7 +429,7 @@ function mts_tensormap_keys_to_properties(tensor::Ptr{mts_tensormap_t}, keys_to_
 end
 
 function mts_tensormap_components_to_properties(tensor::Ptr{mts_tensormap_t}, dimensions::Ptr{Ptr{Cchar}}, dimensions_count::UIntptr)
-    ccall((:mts_tensormap_components_to_properties, libmetatensor),
+    ccall((:mts_tensormap_components_to_properties, libmetatensor), 
         Ptr{mts_tensormap_t},
         (Ptr{mts_tensormap_t}, Ptr{Ptr{Cchar}}, UIntptr,),
         tensor, dimensions, dimensions_count
@@ -437,7 +437,7 @@ function mts_tensormap_components_to_properties(tensor::Ptr{mts_tensormap_t}, di
 end
 
 function mts_tensormap_keys_to_samples(tensor::Ptr{mts_tensormap_t}, keys_to_move::Ptr{mts_labels_t}, fill_value::mts_array_t, sort_samples::Cbool)
-    ccall((:mts_tensormap_keys_to_samples, libmetatensor),
+    ccall((:mts_tensormap_keys_to_samples, libmetatensor), 
         Ptr{mts_tensormap_t},
         (Ptr{mts_tensormap_t}, Ptr{mts_labels_t}, mts_array_t, Cbool,),
         tensor, keys_to_move, fill_value, sort_samples
@@ -445,7 +445,7 @@ function mts_tensormap_keys_to_samples(tensor::Ptr{mts_tensormap_t}, keys_to_mov
 end
 
 function mts_tensormap_set_info(tensor::Ptr{mts_tensormap_t}, key::Ptr{Cchar}, value::Ptr{Cchar})
-    ccall((:mts_tensormap_set_info, libmetatensor),
+    ccall((:mts_tensormap_set_info, libmetatensor), 
         mts_status_t,
         (Ptr{mts_tensormap_t}, Ptr{Cchar}, Ptr{Cchar},),
         tensor, key, value
@@ -453,7 +453,7 @@ function mts_tensormap_set_info(tensor::Ptr{mts_tensormap_t}, key::Ptr{Cchar}, v
 end
 
 function mts_tensormap_get_info(tensor::Ptr{mts_tensormap_t}, key::Ptr{Cchar}, value::Ptr{Ptr{Cchar}})
-    ccall((:mts_tensormap_get_info, libmetatensor),
+    ccall((:mts_tensormap_get_info, libmetatensor), 
         mts_status_t,
         (Ptr{mts_tensormap_t}, Ptr{Cchar}, Ptr{Ptr{Cchar}},),
         tensor, key, value
@@ -461,7 +461,7 @@ function mts_tensormap_get_info(tensor::Ptr{mts_tensormap_t}, key::Ptr{Cchar}, v
 end
 
 function mts_tensormap_info_keys(tensor::Ptr{mts_tensormap_t}, keys::Ptr{Ptr{Ptr{Cchar}}}, keys_count::Ptr{UIntptr})
-    ccall((:mts_tensormap_info_keys, libmetatensor),
+    ccall((:mts_tensormap_info_keys, libmetatensor), 
         mts_status_t,
         (Ptr{mts_tensormap_t}, Ptr{Ptr{Ptr{Cchar}}}, Ptr{UIntptr},),
         tensor, keys, keys_count
@@ -469,7 +469,7 @@ function mts_tensormap_info_keys(tensor::Ptr{mts_tensormap_t}, keys::Ptr{Ptr{Ptr
 end
 
 function mts_tensormap_device(tensor::Ptr{mts_tensormap_t}, device::Ptr{DLDevice})
-    ccall((:mts_tensormap_device, libmetatensor),
+    ccall((:mts_tensormap_device, libmetatensor), 
         mts_status_t,
         (Ptr{mts_tensormap_t}, Ptr{DLDevice},),
         tensor, device
@@ -477,7 +477,7 @@ function mts_tensormap_device(tensor::Ptr{mts_tensormap_t}, device::Ptr{DLDevice
 end
 
 function mts_tensormap_dtype(tensor::Ptr{mts_tensormap_t}, dtype::Ptr{DLDataType})
-    ccall((:mts_tensormap_dtype, libmetatensor),
+    ccall((:mts_tensormap_dtype, libmetatensor), 
         mts_status_t,
         (Ptr{mts_tensormap_t}, Ptr{DLDataType},),
         tensor, dtype
@@ -485,7 +485,7 @@ function mts_tensormap_dtype(tensor::Ptr{mts_tensormap_t}, dtype::Ptr{DLDataType
 end
 
 function mts_labels_load(path::Ptr{Cchar})
-    ccall((:mts_labels_load, libmetatensor),
+    ccall((:mts_labels_load, libmetatensor), 
         Ptr{mts_labels_t},
         (Ptr{Cchar},),
         path
@@ -493,7 +493,7 @@ function mts_labels_load(path::Ptr{Cchar})
 end
 
 function mts_labels_load_buffer(buffer::Ptr{UInt8}, buffer_count::UIntptr)
-    ccall((:mts_labels_load_buffer, libmetatensor),
+    ccall((:mts_labels_load_buffer, libmetatensor), 
         Ptr{mts_labels_t},
         (Ptr{UInt8}, UIntptr,),
         buffer, buffer_count
@@ -541,7 +541,7 @@ function mts_block_load_partial(path::Ptr{Cchar}, samples::Ptr{mts_labels_t}, pr
 end
 
 function mts_block_load_partial_mmap(path::Ptr{Cchar}, samples::Ptr{mts_labels_t}, create_array::mts_create_partial_file_array_callback_t, user_data::Ptr{Cvoid})
-    ccall((:mts_block_load_partial_mmap, libmetatensor),
+    ccall((:mts_block_load_partial_mmap, libmetatensor), 
         Ptr{mts_block_t},
         (Ptr{Cchar}, Ptr{mts_labels_t}, mts_create_partial_file_array_callback_t, Ptr{Cvoid},),
         path, samples, create_array, user_data
@@ -605,7 +605,7 @@ function mts_tensormap_load_partial(path::Ptr{Cchar}, keys::Ptr{mts_labels_t}, s
 end
 
 function mts_tensormap_load_partial_mmap(path::Ptr{Cchar}, keys::Ptr{mts_labels_t}, samples::Ptr{mts_labels_t}, create_array::mts_create_partial_file_array_callback_t, user_data::Ptr{Cvoid})
-    ccall((:mts_tensormap_load_partial_mmap, libmetatensor),
+    ccall((:mts_tensormap_load_partial_mmap, libmetatensor), 
         Ptr{mts_tensormap_t},
         (Ptr{Cchar}, Ptr{mts_labels_t}, Ptr{mts_labels_t}, mts_create_partial_file_array_callback_t, Ptr{Cvoid},),
         path, keys, samples, create_array, user_data
@@ -621,7 +621,7 @@ function mts_tensormap_save(path::Ptr{Cchar}, tensor::Ptr{mts_tensormap_t})
 end
 
 function mts_tensormap_save_buffer(buffer::Ptr{Ptr{UInt8}}, buffer_count::Ptr{UIntptr}, realloc_user_data::Ptr{Cvoid}, realloc::mts_realloc_buffer_t, tensor::Ptr{mts_tensormap_t})
-    ccall((:mts_tensormap_save_buffer, libmetatensor),
+    ccall((:mts_tensormap_save_buffer, libmetatensor), 
         mts_status_t,
         (Ptr{Ptr{UInt8}}, Ptr{UIntptr}, Ptr{Cvoid}, mts_realloc_buffer_t, Ptr{mts_tensormap_t},),
         buffer, buffer_count, realloc_user_data, realloc, tensor
