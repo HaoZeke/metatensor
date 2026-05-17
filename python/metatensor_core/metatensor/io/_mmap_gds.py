@@ -44,8 +44,8 @@ from typing import Optional, Union
 try:
     import cupy as _cp
     import kvikio as _kvikio
-    import torch as _torch  # used for DLPack interop to register the GPU array
     from kvikio.defaults import is_compat_mode_preferred as _is_compat
+    import torch as _torch  # used for DLPack interop to register the GPU array
 except ImportError as err:  # pragma: no cover
     raise ImportError(
         "metatensor.io._mmap_gds requires cupy + kvikio + torch (cuda). "
@@ -207,7 +207,8 @@ def _make_gds_partial_callback(cufile_handle):
                 continue
             if n_bytes % elem_bytes != 0:
                 raise ValueError(
-                    f"region length {n_bytes} is not a multiple of dtype size {elem_bytes}"
+                    f"region length {n_bytes} is not a multiple of "
+                    f"dtype size {elem_bytes}"
                 )
             n_elems = n_bytes // elem_bytes
             dst = flat[written_elems : written_elems + n_elems]
