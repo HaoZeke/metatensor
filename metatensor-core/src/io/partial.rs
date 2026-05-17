@@ -298,6 +298,13 @@ where
         parse_stored_npy_entry(archive, mmap, &values_path)?;
 
     let sample_indices = compute_indices(&all_samples, samples_sel)?;
+    if src_shape.len() < 2 {
+        return Err(Error::Serialization(format!(
+            "block values must have rank >= 2, got shape {:?}",
+            src_shape
+        )));
+    }
+    validate_selected_indices(&src_shape, &sample_indices, None)?;
     let (_, _, src_n_props, row_bytes) = npy_layout(&src_shape, dtype);
 
     let mut output_shape = Vec::with_capacity(src_shape.len());
@@ -356,6 +363,13 @@ where
     let components = load_components(archive, prefix, src_shape.len())?;
     let (kept_grad_indices, new_grad_samples) =
         reindex_gradient_samples(&grad_samples, parent_sample_indices)?;
+    if src_shape.len() < 2 {
+        return Err(Error::Serialization(format!(
+            "block values must have rank >= 2, got shape {:?}",
+            src_shape
+        )));
+    }
+    validate_selected_indices(&src_shape, &kept_grad_indices, None)?;
     let (_, _, src_n_props, row_bytes) = npy_layout(&src_shape, dtype);
 
     let mut output_shape = Vec::with_capacity(src_shape.len());
