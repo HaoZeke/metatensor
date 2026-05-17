@@ -15,14 +15,22 @@ a changelog](https://keepachangelog.com/en/1.1.0/) format. This project follows
   callback and an opaque `void *user_data`; metatensor parses the NPY
   header for each array via mmap and dispatches `(shape, dtype,
   file_offset)` to the callback so the binding decides how to
-  materialise the array (mmap view, plain copy, GPU upload, ...).
-  Byte length is always derivable from `shape * dtype`, so it is not
-  passed explicitly. The input file must use the STORED
+  materialise the array (mmap view, plain copy, GPU Direct Storage,
+  ...). Byte length is always derivable from `shape * dtype`, so it is
+  not passed explicitly. The input file must use the STORED
   (uncompressed) ZIP format and native byte order.
 - `mts_tensormap_load_partial` and `mts_block_load_partial` for
   selective loading with optional `keys` / `samples` / `properties`
   filters (NULL = select-all). Returns owned arrays via the standard
   `mts_create_array_callback_t`.
+- `mts_tensormap_load_partial_mmap` and `mts_block_load_partial_mmap`
+  combining sample selection with a multi-region
+  `mts_create_partial_file_array_callback_t`. The callback receives
+  the list of `(file_offset, region_len)` byte runs per array; the
+  bindings can issue one cuFile pread per region into a GPU buffer
+  (real GDS), or `np.frombuffer` + `np.concatenate` of mmap views, or
+  any other strategy. Property selection is intentionally not
+  supported here (use `load_partial` for that).
 
 ### metatensor-core C++
 
@@ -44,6 +52,15 @@ a changelog](https://keepachangelog.com/en/1.1.0/) format. This project follows
 - `metatensor.load_partial` / `metatensor.io.load_partial` (and the
   block-level variant) for selective loading with optional `keys`,
   `samples`, `properties` filters.
+- `metatensor.io._mmap_gds` opt-in module providing
+  `load_mmap_gds` (full file), `load_partial_mmap_gds` (sample
+  selection via multi-region cuFile preads), and the block-level
+  equivalents. Requires `cupy` + `kvikio` + `torch` (for DLPack
+  interop). Falls back to cuFile compat mode (POSIX reads) when
+  `nvidia-fs` is missing or the filesystem is not GDS-capable; on
+  rg.cosmolab with `nvidia-fs` loaded but a non-GDS-capable scratch
+  filesystem the implementation runs in compat mode and is verified
+  byte-equal to the canonical CPU load on every tested fixture.
 
 <!-- Possible sections for each package:
 

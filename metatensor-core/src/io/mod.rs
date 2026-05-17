@@ -19,7 +19,9 @@ mod mmap;
 pub use self::mmap::{load_mmap, load_block_mmap};
 
 mod partial;
-pub use self::partial::{load_partial, load_block_partial};
+pub use self::partial::{
+    load_block_partial, load_block_partial_mmap, load_partial, load_partial_mmap,
+};
 
 
 use crate::Error;

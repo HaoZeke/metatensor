@@ -363,7 +363,9 @@ def test_load_partial_mmap_gds_round_trip():
     ref_full = mts.load(path)
     gpu_full = load_partial_mmap_gds(path)
     assert len(gpu_full.keys) == len(ref_full.keys)
-    for ref_block, gpu_block in zip(ref_full.blocks(), gpu_full.blocks(), strict=True):
+    for ref_block, gpu_block in zip(
+        ref_full.blocks(), gpu_full.blocks(), strict=True
+    ):
         ref_np = np.asarray(ref_block.values)
         gpu_np = cupy.asnumpy(gpu_block.values)
         np.testing.assert_array_equal(gpu_np, ref_np)
@@ -378,7 +380,9 @@ def test_load_partial_mmap_gds_round_trip():
         values=np.array([[0]], dtype=np.int32),
     )
     ref_filtered = mts.load_partial(path, keys=keys_filter, samples=samples_filter)
-    gpu_filtered = load_partial_mmap_gds(path, keys=keys_filter, samples=samples_filter)
+    gpu_filtered = load_partial_mmap_gds(
+        path, keys=keys_filter, samples=samples_filter
+    )
     assert len(gpu_filtered.keys) == len(ref_filtered.keys)
     for ref_block, gpu_block in zip(
         ref_filtered.blocks(), gpu_filtered.blocks(), strict=True
@@ -400,6 +404,7 @@ def test_load_block_mmap_gds_values_equal():
     ref_np = np.asarray(ref.values)
     gpu_np = cupy.asnumpy(gpu.values)
     np.testing.assert_array_equal(gpu_np, ref_np)
+
 
 
 def test_load_mmap_values_are_views():
