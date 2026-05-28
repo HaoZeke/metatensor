@@ -93,9 +93,18 @@ def register_ffi_targets() -> bool:
     if _REGISTERED:
         return True
 
-    try:
-        import jax.ffi as jax_ffi
-    except (ImportError, AttributeError):
+    # jax >= 0.5.0 exposes the FFI surface as jax.ffi; 0.4.x carries it on
+    # jax.extend.ffi. Probe both so the same module works against the HARD
+    # packet venv (jax 0.4.34) and current main.
+    jax_ffi = None
+    for module_name in ("jax.ffi", "jax.extend.ffi"):
+        try:
+            jax_ffi = __import__(module_name, fromlist=["register_ffi_target"])
+            if hasattr(jax_ffi, "register_ffi_target"):
+                break
+        except ImportError:
+            continue
+    if jax_ffi is None or not hasattr(jax_ffi, "register_ffi_target"):
         return False
 
     try:
