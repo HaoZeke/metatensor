@@ -381,7 +381,7 @@ impl mts_array_t {
         assert!(!dl_managed_tensor.is_null(), "mts_array_t.as_dlpack returned a null pointer on success");
         let ptr = NonNull::new(dl_managed_tensor).expect("pointer is null, this should not happen");
         let tensor = unsafe {
-            DLPackTensor::from_ptr(ptr)
+            DLPackTensor::from_ptr(ptr.as_ptr())
         };
         return Ok(tensor);
     }
