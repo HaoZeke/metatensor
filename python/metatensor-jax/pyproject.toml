@@ -44,3 +44,7 @@ include = ["metatensor_jax*"]
 [tool.pytest.ini_options]
 python_files = ["*.py"]
 testpaths = ["tests"]
+# Use importlib mode so the cwd / tests dir is not prepended to sys.path;
+# otherwise pytest imports the source-tree copy of metatensor_jax (which
+# has no libmetatensor_jax.so next to it) instead of the installed copy.
+addopts = "--import-mode=importlib"

@@ -31,14 +31,27 @@ def _candidate_paths() -> list[str]:
     paths.append(os.path.join(_HERE, "lib", lib_name))
     paths.append(os.path.join(_HERE, lib_name))
 
-    # 2. cargo workspace build outputs
+    # 2. importlib.metadata-resolved install location: when pytest runs from
+    # the source tree, _HERE points at the in-tree copy that has no .so
+    # next to it; the installed copy is under site-packages. Walk
+    # importlib.metadata so a `pip install .` followed by pytest from
+    # python/metatensor-jax/ still finds the library.
+    try:
+        import importlib.metadata as md
+        for f in md.files("metatensor-jax") or []:
+            if f.name == lib_name:
+                paths.append(str(f.locate()))
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 3. cargo workspace build outputs
     repo_root = os.path.realpath(
         os.path.join(_HERE, "..", "..", "..", "..")
     )
     for build_type in ("release", "debug"):
         paths.append(os.path.join(repo_root, "target", build_type, lib_name))
 
-    # 3. cmake build dir (used during `pip install -e`)
+    # 4. cmake build dir (used during `pip install -e`)
     setup_build = os.path.realpath(
         os.path.join(_HERE, "..", "..", "build", "cmake-build")
     )
