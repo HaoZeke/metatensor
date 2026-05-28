@@ -533,7 +533,11 @@ where
             });
         }
 
-        let tensor: DLPackTensor = self.try_into().map_err(|e| Error {
+        // dlpk@main exposes `TryFrom<ArcArray>` for `DLPackTensor` (owned
+        // value), not `TryFrom<&ArcArray>`. ArcArray::clone is cheap (bumps
+        // the refcount only), so a clone-then-consume is the minimal-change
+        // adapter from the vec-slice branch's `&ArcArray` impl.
+        let tensor: DLPackTensor = self.clone().try_into().map_err(|e| Error {
             code: Some(crate::c_api::MTS_INVALID_PARAMETER_ERROR),
             message: format!("failed to convert ndarray to DLPack: {:?}", e),
         })?;
