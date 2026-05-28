@@ -37,25 +37,28 @@ TensorBlockHolder::TensorBlockHolder(
         /* parent */ torch::IValue()
     )
 {
+    // Use the parameter LabelsHolder's device() directly instead of
+    // round-tripping through Rust (this->samples() etc.), which would lose
+    // non-materializable device info like Meta.
     auto values_device = this->values().device();
-    if (values_device != this->samples()->values().device()) {
+    if (values_device != samples->device()) {
         C10_THROW_ERROR(ValueError,
             "cannot create TensorBlock: values and samples must be on the same device, "
-            "got " + values_device.str() + " and " + this->samples()->values().device().str()
+            "got " + values_device.str() + " and " + samples->device().str()
         );
     }
-    for (const auto& component : this->components()) {
-        if (values_device != component->values().device()) {
+    for (const auto& component : components) {
+        if (values_device != component->device()) {
             C10_THROW_ERROR(ValueError,
                 "cannot create TensorBlock: values and components must be on the same device, "
-                "got " + values_device.str() + " and " + component->values().device().str()
+                "got " + values_device.str() + " and " + component->device().str()
             );
         }
     }
-    if (values_device != this->properties()->values().device()) {
+    if (values_device != properties->device()) {
         C10_THROW_ERROR(ValueError,
             "cannot create TensorBlock: values and properties must be on the same device, "
-            "got " + values_device.str() + " and " + this->properties()->values().device().str()
+            "got " + values_device.str() + " and " + properties->device().str()
         );
     }
 }
@@ -71,28 +74,8 @@ TensorBlockHolder::TensorBlockHolder(metatensor::TensorBlock block, std::string 
     parent_(std::move(parent))
 {}
 
-TensorBlock TensorBlockHolder::copy(bool deep) const {
-    if (deep) {
-        return torch::make_intrusive<TensorBlockHolder>(this->block_.clone(), torch::IValue());
-    } else {
-        auto new_block = torch::make_intrusive<TensorBlockHolder>(TensorBlockHolder(
-            this->values(),
-            this->samples(),
-            this->components(),
-            this->properties()
-        ));
-
-        for (const auto& parameter: this->gradients_list()) {
-            auto gradient = TensorBlockHolder(
-                this->block_.gradient(parameter),
-                torch::IValue()
-            );
-
-            new_block->add_gradient(parameter, gradient.copy(/*deep=*/false));
-        }
-
-        return new_block;
-    }
+TensorBlock TensorBlockHolder::copy() const {
+    return torch::make_intrusive<TensorBlockHolder>(this->block_.clone(), torch::IValue());
 }
 
 TensorBlock TensorBlockHolder::to(
@@ -124,7 +107,7 @@ TensorBlock TensorBlockHolder::to(
             torch::IValue()
         );
 
-        block->add_gradient(parameter, gradient.to(dtype, device, non_blocking));
+        block->add_gradient(parameter, gradient.to(dtype, device));
     }
     return block;
 }
@@ -155,15 +138,20 @@ TensorBlock TensorBlockHolder::to_positional(
 }
 
 torch::Tensor TensorBlockHolder::values() const {
-    auto array = block_.const_mts_array();
+    // const_cast is fine here, because the returned torch::Tensor does not
+    // allow modifications to the underlying mts_array (only to the values
+    // inside the tensor).
+    auto array = const_cast<metatensor::TensorBlock&>(block_).mts_array();
 
-    if (array.origin() != TORCH_DATA_ORIGIN) {
+    mts_data_origin_t origin = 0;
+    metatensor::details::check_status(array.origin(array.ptr, &origin));
+    if (origin != TORCH_DATA_ORIGIN) {
         C10_THROW_ERROR(ValueError,
             "this TensorBlock does not contain a C++ torch Tensor"
         );
     }
 
-    auto* ptr = static_cast<metatensor::DataArrayBase*>(array.as_mts_array_t().ptr);
+    auto* ptr = static_cast<metatensor::DataArrayBase*>(array.ptr);
     auto* wrapper = dynamic_cast<TorchDataArray*>(ptr);
     if (wrapper == nullptr) {
         C10_THROW_ERROR(ValueError,
@@ -341,7 +329,7 @@ void TensorBlockHolder::save(const std::string& path) const {
         );
     }
 
-    metatensor::io::save(path, this->block_);
+    metatensor::io::save(path, this->as_metatensor());
 }
 
 torch::Tensor TensorBlockHolder::save_buffer() const {
@@ -359,7 +347,7 @@ torch::Tensor TensorBlockHolder::save_buffer() const {
             ", only float64 is supported"
         );
     }
-    auto buffer = metatensor::io::save_buffer(this->block_);
+    auto buffer = metatensor::io::save_buffer(this->as_metatensor());
     // move the buffer to the heap so it can escape this function
     // `torch::from_blob` does not take ownership of the data,
     // so we need to register a custom deleter to clean up when
@@ -378,9 +366,4 @@ torch::Tensor TensorBlockHolder::save_buffer() const {
         deleter,
         options
     );
-}
-
-metatensor::TensorBlock TensorBlockHolder::release() {
-    auto block = std::move(block_);
-    return block;
 }

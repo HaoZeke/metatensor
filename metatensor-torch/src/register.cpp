@@ -204,7 +204,7 @@ TORCH_LIBRARY(metatensor, m) {
         .def("__repr__", &TensorBlockHolder::repr)
         .def("__str__", &TensorBlockHolder::repr)
         .def("__len__", &TensorBlockHolder::len )
-        .def("copy", &TensorBlockHolder::copy, DOCSTRING, {torch::arg("deep") = true})
+        .def("copy", &TensorBlockHolder::copy)
         .def_property("values", &TensorBlockHolder::values, block_values_setter)
         .def_property("samples", &TensorBlockHolder::samples)
         .def_property("components", &TensorBlockHolder::components)
@@ -253,13 +253,16 @@ TORCH_LIBRARY(metatensor, m) {
         .def("__getitem__", &TensorMapHolder::block_torch, DOCSTRING,
             {torch::arg("selection")}
         )
-        .def("copy", &TensorMapHolder::copy, DOCSTRING, {torch::arg("deep") = true})
+        .def("copy", &TensorMapHolder::copy)
         .def("save", &TensorMapHolder::save, DOCSTRING, {torch::arg("file")})
         .def("save_buffer", &TensorMapHolder::save_buffer)
         .def_static("load", &TensorMapHolder::load)
         .def_static("load_buffer", &TensorMapHolder::load_buffer)
         .def("items", &TensorMapHolder::items)
         .def_property("keys", &TensorMapHolder::keys)
+        .def("blocks_matching", &TensorMapHolder::blocks_matching, DOCSTRING,
+            {torch::arg("selection")}
+        )
         .def("block_by_id", &TensorMapHolder::block_by_id, DOCSTRING,
             {torch::arg("index")}
         )
@@ -272,6 +275,7 @@ TORCH_LIBRARY(metatensor, m) {
         .def("blocks", &TensorMapHolder::blocks_torch, DOCSTRING,
             {torch::arg("selection") = torch::IValue()}
         )
+        // Python: fill_value accepts int, float, bool (TorchScript 'number' type)
         .def("keys_to_samples", &TensorMapHolder::keys_to_samples, DOCSTRING,
             {torch::arg("keys_to_move"), torch::arg("fill_value") = 0, torch::arg("sort_samples") = true}
         )
