@@ -100,16 +100,7 @@ class cmake_ext(build_ext):
 
 
 if __name__ == "__main__":
-    install_requires = ["jax", "jaxlib"]
-    if os.path.exists(METATENSOR_CORE_SRC):
-        install_requires.append(
-            f"metatensor-core @ file://{METATENSOR_CORE_SRC}"
-        )
-    else:
-        install_requires.append("metatensor-core >=0.1.18,<0.2")
-
     setup(
-        install_requires=install_requires,
         ext_modules=[
             Extension(name="metatensor_jax", sources=[]),
         ],

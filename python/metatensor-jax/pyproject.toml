@@ -1,8 +1,14 @@
 [project]
 name = "metatensor-jax"
-dynamic = ["dependencies"]
 version = "0.1.0"
 requires-python = ">=3.10"
+dependencies = [
+    "metatensor-core",
+    # The R8 tox env pins these for ABI compatibility with the XLA FFI
+    # custom-call handlers in libmetatensor_jax.so.
+    "jax >=0.4.34, <0.5",
+    "jaxlib >=0.4.34, <0.5",
+]
 
 readme = "README.rst"
 license = "BSD-3-Clause"

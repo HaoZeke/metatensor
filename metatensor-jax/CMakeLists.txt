@@ -136,11 +136,9 @@ target_include_directories(metatensor_jax PUBLIC
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-# Hide non-exported symbols by default
-set_target_properties(metatensor_jax PROPERTIES
-    CXX_VISIBILITY_PRESET hidden
-    VISIBILITY_INLINES_HIDDEN ON
-)
+# Keep handler-symbol visibility default: XLA_FFI_DEFINE_HANDLER_SYMBOL
+# emits the metatensor_<op> extern "C" entry points, and Python loads them
+# via ctypes by name. Hiding them would defeat the FFI registration.
 
 include(GenerateExportHeader)
 generate_export_header(metatensor_jax
