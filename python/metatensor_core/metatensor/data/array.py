@@ -117,7 +117,7 @@ Device = Union[str, torch_device]
 
 def array_dtype(array) -> DType:
     """Get the dtype of an array"""
-    if _is_numpy_array(array) or _is_torch_array(array):
+    if _is_numpy_array(array) or _is_torch_array(array) or _is_jax_array(array):
         return array.dtype
     else:
         raise TypeError(f"unknown array type: {type(array)}")
@@ -129,6 +129,8 @@ def array_change_dtype(array, dtype: DType, non_blocking: bool):
         return array.astype(dtype)
     elif _is_torch_array(array):
         return array.to(dtype=dtype, non_blocking=non_blocking)
+    elif _is_jax_array(array):
+        return array.astype(dtype)
     else:
         raise TypeError(f"unknown array type: {type(array)}")
 
@@ -139,6 +141,11 @@ def array_device(array) -> Device:
         return "cpu"
     elif _is_torch_array(array):
         return array.device
+    elif _is_jax_array(array):
+        # jax.Array.device returns a Device object whose str() works as a name;
+        # standardize to "cpu" / "cuda:N" so downstream code that compares
+        # device strings keeps working.
+        return str(array.device)
     else:
         raise TypeError(f"unknown array type: {type(array)}")
 
