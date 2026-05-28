@@ -17,3 +17,8 @@ option(BUILD_METATENSOR_TORCH "Build the TorchScript bindings to metatensor" OFF
 if (BUILD_METATENSOR_TORCH)
     add_subdirectory(metatensor-torch)
 endif()
+
+option(BUILD_METATENSOR_JAX "Build the XLA FFI bindings to metatensor for JAX" OFF)
+if (BUILD_METATENSOR_JAX)
+    add_subdirectory(metatensor-jax)
+endif()

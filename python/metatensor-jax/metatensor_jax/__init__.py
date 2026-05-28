@@ -14,15 +14,17 @@ import metatensor
 
 from ._jax_array import register_jax_array_callbacks  # noqa: F401
 from ._pytree import register_pytrees
+from ._xla_ffi import register_ffi_targets
 
 # Re-export unified types for convenience
 Labels = metatensor.Labels
 TensorBlock = metatensor.TensorBlock
 TensorMap = metatensor.TensorMap
 
-# Register PyTree nodes and JAX array callbacks on import
+# Register PyTree nodes, JAX array callbacks, and XLA FFI handlers on import
 register_pytrees()
 register_jax_array_callbacks()
+register_ffi_targets()
 
 __all__ = [
     "Labels",

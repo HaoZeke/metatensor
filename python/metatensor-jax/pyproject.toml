@@ -1,5 +1,6 @@
 [project]
 name = "metatensor-jax"
+dynamic = ["dependencies"]
 version = "0.1.0"
 requires-python = ">=3.10"
 
@@ -16,22 +17,23 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 
-dependencies = [
-    "metatensor-core",
-    "jax",
-    "jaxlib",
-]
-
 [project.urls]
 homepage = "https://docs.metatensor.org/latest/"
 repository = "https://github.com/metatensor/metatensor"
 
 [build-system]
-requires = ["setuptools >=77"]
+requires = [
+    "setuptools >=77",
+    "packaging >=23",
+    "cmake",
+]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-zip-safe = true
+zip-safe = false
+
+[tool.setuptools.packages.find]
+include = ["metatensor_jax*"]
 
 [tool.pytest.ini_options]
 python_files = ["*.py"]

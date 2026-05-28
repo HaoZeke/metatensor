@@ -4,7 +4,7 @@ resolver = "2"
 members = [
     "metatensor-core",
     "metatensor-torch",
-    "metatensor-xla-ffi",
+    "metatensor-jax",
     "rust/metatensor",
     "rust/metatensor-sys",
     "python",
