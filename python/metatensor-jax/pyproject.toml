@@ -3,9 +3,9 @@ name = "metatensor-jax"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
-    "metatensor-core",
-    # The R8 tox env pins these for ABI compatibility with the XLA FFI
-    # custom-call handlers in libmetatensor_jax.so.
+    # metatensor-core is the runtime peer; we leave it unpinned at the
+    # pyproject level and let tox / the surrounding venv pick the local
+    # dev wheel. The R8 tox env installs the local checkout.
     "jax >=0.4.34, <0.5",
     "jaxlib >=0.4.34, <0.5",
 ]
