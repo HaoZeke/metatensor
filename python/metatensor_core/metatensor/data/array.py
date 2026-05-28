@@ -156,6 +156,13 @@ def array_device_is_cpu(array) -> bool:
         return True
     elif _is_torch_array(array):
         return array.device.type == torch.device("cpu").type
+    elif _is_jax_array(array):
+        # JAX exposes the device as a Device object; check its platform.
+        platform = getattr(getattr(array, "device", None), "platform", None)
+        if platform is not None:
+            return platform == "cpu"
+        # Fallback for older jax: parse the string repr.
+        return "cpu" in str(getattr(array, "device", "")).lower()
     else:
         raise TypeError(f"unknown array type: {type(array)}")
 
@@ -168,6 +175,10 @@ def array_change_device(array, device: Device, non_blocking: bool):
         return array
     elif _is_torch_array(array):
         return array.to(device=device, non_blocking=non_blocking)
+    elif _is_jax_array(array):
+        # CPU JAX arrays stay on CPU; cross-device transfers are handled by
+        # the operations layer via jax.device_put when needed.
+        return array
     else:
         raise TypeError(f"unknown array type: {type(array)}")
 
